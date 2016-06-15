@@ -48,10 +48,12 @@ classdef figure_cache < handle
             try
                 data = obj.downsample_minmax(newdata);
                 try
-                    firstpt = max(1, round(mod(data(1,1),obj.xmax)/obj.xmax*obj.pts));
-                    lastpt = min(obj.pts, firstpt+size(data,1)-1);
-                    obj.ydata(firstpt:lastpt,1:obj.nsigs) = data((firstpt:lastpt)-firstpt+1,2:obj.nsigs+1); % new data
-                    obj.ydata(lastpt:min(obj.pts,lastpt+obj.buffer),1:obj.nsigs) = nan; % buffer
+                    firstpt = max(1, round(mod(data(1,1),obj.xmax)/obj.xmax*obj.pts)-1);
+                    lastpt = firstpt+size(data,1)-1;
+                    inds = mod((firstpt:lastpt)-1, obj.pts)+1;
+                    indsbuff = inds(end):min(obj.pts,inds(end)+obj.buffer);
+                    obj.ydata(inds,:) = data(:,2:(obj.nsigs+1)); % new data
+                    obj.ydata(indsbuff,:) = nan; % buffer
                 catch ex
                    display('Wrong number of input signals.');
                 end
