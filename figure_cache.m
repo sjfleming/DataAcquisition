@@ -103,14 +103,10 @@ classdef figure_cache < handle
             try
                 if strcmp(inout,'in')
                     obj.ymax = obj.ymax/2;
-                    obj.ax;
-                    ylim([-obj.ymax obj.ymax]);
-                    %obj.draw_fig_now;
+                    obj.ax.YLim = [-obj.ymax obj.ymax];
                 elseif strcmp(inout,'out')
                     obj.ymax = 2*obj.ymax;
-                    obj.ax;
-                    ylim([-obj.ymax obj.ymax]);
-                    %obj.draw_fig_now;
+                    obj.ax.YLim = [-obj.ymax obj.ymax];
                 end
             catch ex
                 display('Trouble zooming.');
@@ -123,25 +119,14 @@ classdef figure_cache < handle
         
         function d = downsample_minmax(obj, data)
             % downsamples data appropriately for viewing on a plot
-%             dspoints = (data(end,1)-data(1,1))/obj.xmax*obj.pts; % number of points in the plot
-%             if dspoints > 0.25*size(data,1) % there's no point in downsampling in this way
-%                 d = obj.downsample_random(data);
-%                 return;
-%             end
-%             d = nan(dspoints,size(data,2)-1);
-%             for i = 1:(size(data,2)-1)
-%                 d1 = accumarray(ceil(linspace(1,round(dspoints/2),size(data,1)))',data(:,2:end),[],@max)';
-%                 d2 = accumarray(ceil(linspace(1,round(dspoints/2),size(data,1)))',data(:,2:end),[],@min)';
-%                 d(:,i) = reshape([d1; d2],[1, numel(d1)+numel(d2)]);
-%             end
-            
+            % takes five times as long as downsample_random
             dspoints = round((data(end,1)-data(1,1))/obj.xmax*obj.pts/2); % half the number of points in this section of plot data
             logic = [ones(1,dspoints), zeros(1,size(data,1)-dspoints)]; % dspoints number of ones
             logic = boolean(logic(:,randperm(size(logic,2)))); % random rearrangement
             [~,inds] = find(logic==1);
             factor = round(size(data,1)/dspoints); % approximate downsampling factor
             d1 = cell2mat(arrayfun(@(x) min(data(max(1,x-factor):min(size(data,1),x+factor),:)), inds, 'uniformoutput', false)');
-            d2 = cell2mat(arrayfun(@(x) min(data(max(1,x-factor):min(size(data,1),x+factor),:)), inds, 'uniformoutput', false)');
+            d2 = cell2mat(arrayfun(@(x) max(data(max(1,x-factor):min(size(data,1),x+factor),:)), inds, 'uniformoutput', false)');
             d(2:2:size(d1,1)*2,:) = d2;
             d(1:2:(size(d1,1)*2)-1,:) = d1;
         end
