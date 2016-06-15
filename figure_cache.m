@@ -6,6 +6,8 @@ classdef figure_cache < handle
     properties
         nsigs = 2; % number of channels being displayed
         xmax = 5; % maximum limit of x axis (time in seconds)
+        ymax = 1; % maximum (symmetric) limit of y axis
+        alpha = 1; % scaling factor to turn input voltage (-10 to 10 V) into signal
         pts = 5000; % total number of points displayed
         xdata = linspace(0,5,5000)';
         ydata = nan(5000,2);
@@ -33,6 +35,7 @@ classdef figure_cache < handle
             plot(obj.ax, obj.xdata, obj.ydata);
             obj.ax;
             xlim([0 obj.xmax]);
+            ylim([-obj.ymax obj.ymax]);
             xlabel('Time (s)');
             ylabel('Current (pA)')
             grid(obj.ax,'on');
@@ -43,7 +46,7 @@ classdef figure_cache < handle
             % updates the data in the cache with new data
             % 'newdata' should be in column form, x being column 1
             try
-                data = obj.downsample_random(newdata);
+                data = obj.downsample_minmax(newdata);
                 try
                     firstpt = max(1, round(mod(data(1,1),obj.xmax)/obj.xmax*obj.pts));
                     lastpt = min(obj.pts, firstpt+size(data,1)-1);
@@ -76,28 +79,76 @@ classdef figure_cache < handle
             end
         end
         
+        function zoom_x(obj, inout)
+            % zooms in or out on the x axis
+            try
+                if strcmp(inout,'in')
+                    obj.xmax = obj.xmax/2;
+                    obj.xdata = linspace(0,obj.xmax,obj.pts)';
+                    obj.clear_fig;
+                    obj.draw_fig_now;
+                elseif strcmp(inout,'out')
+                    obj.xmax = 2*obj.xmax;
+                    obj.xdata = linspace(0,obj.xmax,obj.pts)';
+                    obj.clear_fig;
+                    obj.draw_fig_now;
+                end
+            catch ex
+                display('Trouble zooming.');
+            end
+        end
+        
+        function zoom_y(obj, inout)
+            % zooms in or out on the y axis
+            try
+                if strcmp(inout,'in')
+                    obj.ymax = obj.ymax/2;
+                    obj.ax;
+                    ylim([-obj.ymax obj.ymax]);
+                    %obj.draw_fig_now;
+                elseif strcmp(inout,'out')
+                    obj.ymax = 2*obj.ymax;
+                    obj.ax;
+                    ylim([-obj.ymax obj.ymax]);
+                    %obj.draw_fig_now;
+                end
+            catch ex
+                display('Trouble zooming.');
+            end
+        end
+        
     end
     
     methods (Access = private)
         
         function d = downsample_minmax(obj, data)
             % downsamples data appropriately for viewing on a plot
-            dspoints = (data(end,1)-data(1,1))/obj.xmax*obj.pts; % number of points in the plot
-            if dspoints > 0.25*size(data,1) % there's no point in downsampling in this way
-                d = obj.downsample_random(data);
-                return;
-            end
-            d = nan(dspoints,size(data,2)-1);
-            for i = 1:(size(data,2)-1)
-                d1 = accumarray(ceil(linspace(1,round(dspoints/2),size(data,1)))',data(:,2:end),[],@max)';
-                d2 = accumarray(ceil(linspace(1,round(dspoints/2),size(data,1)))',data(:,2:end),[],@min)';
-                d(:,i) = reshape([d1; d2],[1, numel(d1)+numel(d2)]);
-            end
+%             dspoints = (data(end,1)-data(1,1))/obj.xmax*obj.pts; % number of points in the plot
+%             if dspoints > 0.25*size(data,1) % there's no point in downsampling in this way
+%                 d = obj.downsample_random(data);
+%                 return;
+%             end
+%             d = nan(dspoints,size(data,2)-1);
+%             for i = 1:(size(data,2)-1)
+%                 d1 = accumarray(ceil(linspace(1,round(dspoints/2),size(data,1)))',data(:,2:end),[],@max)';
+%                 d2 = accumarray(ceil(linspace(1,round(dspoints/2),size(data,1)))',data(:,2:end),[],@min)';
+%                 d(:,i) = reshape([d1; d2],[1, numel(d1)+numel(d2)]);
+%             end
+            
+            dspoints = round((data(end,1)-data(1,1))/obj.xmax*obj.pts/2); % half the number of points in this section of plot data
+            logic = [ones(1,dspoints), zeros(1,size(data,1)-dspoints)]; % dspoints number of ones
+            logic = boolean(logic(:,randperm(size(logic,2)))); % random rearrangement
+            [~,inds] = find(logic==1);
+            factor = round(size(data,1)/dspoints); % approximate downsampling factor
+            d1 = cell2mat(arrayfun(@(x) min(data(max(1,x-factor):min(size(data,1),x+factor),:)), inds, 'uniformoutput', false)');
+            d2 = cell2mat(arrayfun(@(x) min(data(max(1,x-factor):min(size(data,1),x+factor),:)), inds, 'uniformoutput', false)');
+            d(2:2:size(d1,1)*2,:) = d2;
+            d(1:2:(size(d1,1)*2)-1,:) = d1;
         end
         
         function d = downsample_random(obj, data)
             % downsamples data appropriately for viewing on a plot
-            dspoints = round((data(end,1)-data(1,1))/obj.xmax*obj.pts); % number of points in the plot
+            dspoints = round((data(end,1)-data(1,1))/obj.xmax*obj.pts); % number of points in this section of plot data
             logic = [ones(1,dspoints), zeros(1,size(data,1)-dspoints)]; % dspoints number of ones
             logic = boolean(logic(:,randperm(size(logic,2)))); % random rearrangement
             d = data(logic',:);

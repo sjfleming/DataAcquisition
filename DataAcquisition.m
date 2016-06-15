@@ -120,12 +120,16 @@ function x_plus_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
+handles.fig_cache.zoom_x('in');
+
 
 % --- Executes on button press in x_minus.
 function x_minus_Callback(hObject, eventdata, handles)
 % hObject    handle to x_minus (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+
+handles.fig_cache.zoom_x('out');
 
 
 % --- Executes on button press in y_plus.
@@ -134,12 +138,16 @@ function y_plus_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
+handles.fig_cache.zoom_y('in');
+
 
 % --- Executes on button press in y_minus.
 function y_minus_Callback(hObject, eventdata, handles)
 % hObject    handle to y_minus (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+
+handles.fig_cache.zoom_y('out');
 
 
 % --- Executes on button press in play.
