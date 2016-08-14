@@ -242,8 +242,8 @@ classdef DataAcquisition < handle
             obj.noiseSizing;
             obj.noiseResizeFcn;
 
-            % No figure cache necessary
-            obj.fig_cache = [];
+            % Initialize figure cache
+            obj.fig_cache = figure_cache(obj.panel, 2, 5);
 
             % Show figure
             obj.fig.Visible = 'on';
@@ -473,56 +473,7 @@ classdef DataAcquisition < handle
             obj.fig_cache.draw_fig_now();
         end
         
-        function startNoiseDisplay(obj, button)
-            % Sample chunks of data, calculate noise, and display it
-            try
-                set(button,'CData',imread('Pause.png'));
-                set(button,'String','');
-            catch ex
-                set(button,'String','Pause');
-            end
-            try
-                obj.fig_cache.clear_fig;
-                % add listener for data
-                obj.DAQ.s.NotifyWhenDataAvailableExceeds = 60000; % update every 2 seconds (30kHz)
-                obj.DAQ.listeners.plot = addlistener(obj.DAQ.s, 'DataAvailable', ...
-                    @(~,event) plotNoise(event));
-                % start DAQ session
-                obj.DAQ.s.startBackground;
-            catch ex
-                
-            end
-        end
-        
-        function stopNoiseDisplay(obj, button)
-            try
-                set(button,'CData',imread('Play.png'));
-                set(button,'String','');
-            catch ex
-                set(button,'String','Play');
-            end
-            try
-                obj.DAQ.s.stop;
-                obj.DAQ.s.IsNotifyWhenDataAvailableExceedsAuto = true; % set back to auto
-                delete(obj.DAQ.listeners.noise);
-            catch ex
-                
-            end
-        end
-        
-        function plotNoise(obj, evt)
-            % Calculate the noise power spectral density, and plot it
-            % calculation
-            sfreq = 1/(evt.Data(2,1)-evt.Data(1,1));
-            fftsize = min(size(evt.Data,1),2^17);
-            dfft = sfreq*abs(fft(evt.Data(:,2))).^2/fftsize;
-            dfft = 2*dfft;
-            f = sfreq*(0:fftsize-1)/fftsize; % frequency range
-            imax = floor(size(dfft,1)/2); % Nyquist frequency range
-            % plot
-            plot(obj.axes, f(1:imax)', dfft(1:imax,1));
-            drawnow;
-        end
+        function star
         
         function sz = getPixelPos(~, hnd)
             old_units = get(hnd,'Units');

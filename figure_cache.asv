@@ -119,12 +119,14 @@ classdef figure_cache < handle
             % scroll along the y axis
             try
                 if strcmp(updown,'up')
-                    obj.ax.YLim = obj.ax.YLim + obj.ymax/5;
+                    obj.ymax = obj.ymax/2;
+                    obj.ax.YLim = [-obj.ymax obj.ymax];
                 elseif strcmp(updown,'down')
-                    obj.ax.YLim = obj.ax.YLim - obj.ymax/5;
+                    obj.ymax = 2*obj.ymax;
+                    obj.ax.YLim = [-obj.ymax obj.ymax];
                 end
             catch ex
-                display('Trouble scrolling.');
+                display('Trouble zooming.');
             end
         end
         
