@@ -48,7 +48,7 @@ classdef DataAcquisition < handle
                     disp(daq.getDevices);
                 end
             end
-            %startDAQ;
+            startDAQ;
             
             % Initialize temporary file and file data
             function setFileLocation(~,~)
@@ -133,7 +133,7 @@ classdef DataAcquisition < handle
             obj.normalResizeFcn;
 
             % Initialize figure cache
-            obj.fig_cache = figure_cache(obj.panel, 2, 5);
+            obj.fig_cache = figure_cache(obj.axes, 2, 5);
 
             % Show figure
             obj.fig.Visible = 'on';
@@ -144,8 +144,7 @@ classdef DataAcquisition < handle
             obj.panel = uipanel('Parent',obj.fig,'Position',[0 0 1 1]);
 
             obj.axes = axes('Parent',obj.panel,'Position',[0.05 0.05 0.95 0.90],...
-                'XTickLabel','','YTickLabel','','GridLineStyle','-',...
-                'XColor', 0.85*[1 1 1],'YColor', 0.85*[1 1 1]);
+                'GridLineStyle','-','XColor', 0.85*[1 1 1],'YColor', 0.85*[1 1 1]);
             set(obj.axes,'NextPlot','add','XLimMode','manual');
             set(obj.axes,'XGrid','on','YGrid','on','Tag','Axes','Box','on');
             obj.axes.YLabel.String = 'Current (pA)';
@@ -158,7 +157,7 @@ classdef DataAcquisition < handle
             % y-axis
             obj.ybuts = [];
             obj.ybuts(1) = uicontrol('Parent', obj.panel, 'String','<html>-</html>',...
-                'callback', @(~,~) obj.fig_cache.zoom_x('out'));
+                'callback', @(~,~) obj.fig_cache.zoom_y('out'));
             obj.ybuts(2) = uicontrol('Parent', obj.panel, 'String','<html>&darr;</html>',...
                 'callback', @(~,~) obj.fig_cache.scroll_y('down'));
             obj.ybuts(3) = uicontrol('Parent', obj.panel, 'String','<html>R</html>',...
@@ -166,7 +165,7 @@ classdef DataAcquisition < handle
             obj.ybuts(4) = uicontrol('Parent', obj.panel, 'String','<html>&uarr;</html>',...
                 'callback', @(~,~) obj.fig_cache.scroll_y('up'));
             obj.ybuts(5) = uicontrol('Parent', obj.panel, 'String','<html>+</html>',...
-                'callback', @(~,~) obj.fig_cache.zoom_x('in'));
+                'callback', @(~,~) obj.fig_cache.zoom_y('in'));
 
             % x-axis
             obj.xbuts = [];
@@ -269,7 +268,7 @@ classdef DataAcquisition < handle
             % y-axis
             obj.ybuts = [];
             obj.ybuts(1) = uicontrol('Parent', obj.panel, 'String','<html>-</html>',...
-                'callback', @(~,~) obj.fig_cache.zoom_x('out'));
+                'callback', @(~,~) obj.fig_cache.zoom_y('out'));
             obj.ybuts(2) = uicontrol('Parent', obj.panel, 'String','<html>&darr;</html>',...
                 'callback', @(~,~) obj.fig_cache.scroll_y('down'));
             obj.ybuts(3) = uicontrol('Parent', obj.panel, 'String','<html>R</html>',...
@@ -277,7 +276,7 @@ classdef DataAcquisition < handle
             obj.ybuts(4) = uicontrol('Parent', obj.panel, 'String','<html>&uarr;</html>',...
                 'callback', @(~,~) obj.fig_cache.scroll_y('up'));
             obj.ybuts(5) = uicontrol('Parent', obj.panel, 'String','<html>+</html>',...
-                'callback', @(~,~) obj.fig_cache.zoom_x('in'));
+                'callback', @(~,~) obj.fig_cache.zoom_y('in'));
 
             % top
             obj.tbuts = [];
@@ -286,12 +285,9 @@ classdef DataAcquisition < handle
                 'callback', @(src,~) obj.stateDecision(src), 'tag', 'noise');
 
             % set the resize function
-            set(obj.panel, 'ResizeFcn', @resizeFcn);
+            set(obj.panel, 'ResizeFcn', @(~,~) obj.noiseResizeFcn);
             % and call it to set default positions
             obj.noiseResizeFcn;
-
-            % Initialize figure cache
-            obj.fig_cache = figure_cache(obj.panel, 2, 5);
 
             % Show figure
             obj.fig.Visible = 'on';
@@ -415,11 +411,11 @@ classdef DataAcquisition < handle
                 obj.fig_cache.clear_fig;
                 % add listener for data
                 obj.DAQ.listeners.plot = addlistener(obj.DAQ.s, 'DataAvailable', ...
-                    @(~,event) showData(event));
+                    @(~,event) obj.showData(event));
                 % start DAQ session
                 obj.DAQ.s.startBackground;
             catch ex
-                
+                display('Error.')
             end
         end
         
@@ -450,7 +446,7 @@ classdef DataAcquisition < handle
                 fid = fopen(obj.file.name,'w');
                 % add listener for data
                 obj.DAQ.listeners.logAndPlot = addlistener(obj.DAQ.s, 'DataAvailable', ...
-                    @(~,event) showDataAndRecord(event, fid));
+                    @(~,event) obj.showDataAndRecord(event, fid));
                 obj.file.fid = fid;
                 display('Saving data to');
                 display(obj.file.name);
@@ -486,7 +482,7 @@ classdef DataAcquisition < handle
                 % add listener for data
                 obj.DAQ.s.NotifyWhenDataAvailableExceeds = 60000; % update every 2 seconds (30kHz)
                 obj.DAQ.listeners.noise = addlistener(obj.DAQ.s, 'DataAvailable', ...
-                    @(~,event) plotNoise(event));
+                    @(~,event) obj.plotNoise(event));
                 % start DAQ session
                 obj.DAQ.s.startBackground;
             catch ex

@@ -14,6 +14,8 @@ classdef figure_cache < handle
         buffer = 5000/20; % blank space ahead of data
         ax; % axis object that this figure_cache object is attached to
         cmap = get(groot,'defaultaxescolororder');
+        currentTime = 0; % for tracking data coming in
+        t0 = 0; % can re-zero the time axis on zooming, etc.
     end
     
     methods
@@ -31,9 +33,10 @@ classdef figure_cache < handle
             % draws initial non-data on figure
             % plot so it's not an empty axis object
             % or to clear data from axes
+            obj.t0 = obj.currentTime;
+            cla(obj.ax);
             obj.ydata = nan(obj.pts,obj.nsigs);
             plot(obj.ax, obj.xdata, obj.ydata);
-            obj.ax;
             xlim([0 obj.xmax]);
             ylim([-obj.ymax obj.ymax]);
             xlabel('Time (s)');
@@ -47,8 +50,12 @@ classdef figure_cache < handle
             % 'newdata' should be in column form, x being column 1
             try
                 data = obj.downsample_minmax(newdata);
+                obj.currentTime = data(end,1);
+                if obj.currentTime < obj.t0 % reset for new display session
+                    obj.t0 = 0;
+                end
                 try
-                    firstpt = max(1, round(mod(data(1,1),obj.xmax)/obj.xmax*obj.pts)-1);
+                    firstpt = max(1, round(mod(data(1,1)-obj.t0,obj.xmax)/obj.xmax*obj.pts)-1);
                     lastpt = firstpt+size(data,1)-1;
                     inds = mod((firstpt:lastpt)-1, obj.pts)+1;
                     indsbuff = inds(end):min(obj.pts,inds(end)+obj.buffer);
@@ -69,7 +76,7 @@ classdef figure_cache < handle
                 %logic = boolean(arrayfun(@(x) isa(x,'matlab.graphics.axis.Axes'), obj.ax.Children));
                 u = obj.ax.Children;
                 if isempty(u)
-                    plot(obj.ax, obj.xdata,obj.ydata);
+                    plot(obj.ax, obj.xdata, obj.ydata);
                 else
                     for i = 1:obj.nsigs
                         set(u(i),'YData',obj.ydata(:,i),'Color',obj.cmap(i,:)); % advanced play
