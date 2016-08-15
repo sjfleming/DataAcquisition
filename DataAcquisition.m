@@ -73,10 +73,11 @@ classdef DataAcquisition < handle
             % Define what happens on close
             function closeProg(~,~)
                 % close figure
-                close(obj.fig)
-                % delete listeners
+                delete(obj.fig)
+                % delete stuff
                 try
                     arrayfun(@(lh) delete(lh), obj.DAQ.listeners);
+                    delete(obj.fig_cache);
                 catch ex
                     
                 end
@@ -84,6 +85,7 @@ classdef DataAcquisition < handle
                 try
                     stop(obj.DAQ.s);
                     stop(obj.DAQ.ao);
+                    delete(obj.DAQ);
                 catch ex
                     
                 end
@@ -96,11 +98,12 @@ classdef DataAcquisition < handle
             obj.DEFS.BIGBUTTONSIZE  = 35;
             obj.DEFS.BUTTONSIZE     = 20;
             obj.DEFS.PADDING        = 2;
-            obj.DEFS.LABELWIDTH     = 28;
+            obj.DEFS.LABELWIDTH     = 55;
             
             % start making GUI objects
             obj.fig = figure('Name','DataAcquisition','MenuBar','none',...
-                'NumberTitle','off','DockControls','off','Visible','off');
+                'NumberTitle','off','DockControls','off','Visible','off', ...
+                'DeleteFcn',@closeProg);
             
             % set its position
             oldunits = get(obj.fig,'Units');
@@ -128,6 +131,13 @@ classdef DataAcquisition < handle
         end
         
         function normalMode(obj)
+            % stop other things that might have been running
+            try
+                obj.stopNoiseDisplay([]);
+            catch ex
+                
+            end
+            
             % set default positions
             obj.normalSizing;
             obj.normalResizeFcn;
@@ -144,9 +154,11 @@ classdef DataAcquisition < handle
             obj.panel = uipanel('Parent',obj.fig,'Position',[0 0 1 1]);
 
             obj.axes = axes('Parent',obj.panel,'Position',[0.05 0.05 0.95 0.90],...
-                'GridLineStyle','-','XColor', 0.85*[1 1 1],'YColor', 0.85*[1 1 1]);
+                'GridLineStyle','-','XColor', 0.15*[1 1 1],'YColor', 0.15*[1 1 1]);
             set(obj.axes,'NextPlot','add','XLimMode','manual');
             set(obj.axes,'XGrid','on','YGrid','on','Tag','Axes','Box','on');
+            obj.axes.XLim = [0 5];
+            obj.axes.YLim = [-1 1];
             obj.axes.YLabel.String = 'Current (pA)';
             obj.axes.YLabel.Color = 'k';
             obj.axes.XLabel.String = 'Time (s)';
@@ -161,7 +173,7 @@ classdef DataAcquisition < handle
             obj.ybuts(2) = uicontrol('Parent', obj.panel, 'String','<html>&darr;</html>',...
                 'callback', @(~,~) obj.fig_cache.scroll_y('down'));
             obj.ybuts(3) = uicontrol('Parent', obj.panel, 'String','<html>R</html>',...
-                'callback', @(~,~) obj.fig_cache.clear_fig);
+                'callback', @(~,~) obj.fig_cache.reset_fig);
             obj.ybuts(4) = uicontrol('Parent', obj.panel, 'String','<html>&uarr;</html>',...
                 'callback', @(~,~) obj.fig_cache.scroll_y('up'));
             obj.ybuts(5) = uicontrol('Parent', obj.panel, 'String','<html>+</html>',...
@@ -237,6 +249,18 @@ classdef DataAcquisition < handle
         end
 
         function noiseMode(obj)
+            % stop other things that might have been running
+            try
+                obj.stopPlay([]);
+            catch ex
+                
+            end
+            try
+                obj.stopRecord([]);
+            catch ex
+                
+            end
+            
             % set default positions
             obj.noiseSizing;
             obj.noiseResizeFcn;
@@ -253,8 +277,7 @@ classdef DataAcquisition < handle
             obj.panel = uipanel('Parent',obj.fig,'Position',[0 0 1 1]);
 
             obj.axes = axes('Parent',obj.panel,'Position',[0.05 0.05 0.95 0.90],...
-                'XTickLabel','','YTickLabel','','GridLineStyle','-',...
-                'XColor', 0.85*[1 1 1],'YColor', 0.85*[1 1 1]);
+                'GridLineStyle','-','XColor', 0.15*[1 1 1],'YColor', 0.15*[1 1 1]);
             set(obj.axes,'NextPlot','add','XLimMode','manual');
             set(obj.axes,'XGrid','on','YGrid','on','Tag','Axes', ...
                 'Box','on','XScale','log','YScale','log');
@@ -262,21 +285,44 @@ classdef DataAcquisition < handle
             obj.axes.YLabel.Color = 'k';
             obj.axes.XLabel.String = 'Frequency (Hz)';
             obj.axes.XLabel.Color = 'k';
+            obj.axes.YLim = [1e-12, 1e-4];
+            obj.axes.XLim = [1 3e4];
 
             % now make the buttons
 
             % y-axis
             obj.ybuts = [];
             obj.ybuts(1) = uicontrol('Parent', obj.panel, 'String','<html>-</html>',...
-                'callback', @(~,~) obj.fig_cache.zoom_y('out'));
+                'callback', @(~,~) zoom_y('out'));
             obj.ybuts(2) = uicontrol('Parent', obj.panel, 'String','<html>&darr;</html>',...
-                'callback', @(~,~) obj.fig_cache.scroll_y('down'));
+                'callback', @(~,~) scroll_y('down'));
             obj.ybuts(3) = uicontrol('Parent', obj.panel, 'String','<html>R</html>',...
-                'callback', @(~,~) obj.fig_cache.clear_fig);
+                'callback', @(~,~) reset_fig);
             obj.ybuts(4) = uicontrol('Parent', obj.panel, 'String','<html>&uarr;</html>',...
-                'callback', @(~,~) obj.fig_cache.scroll_y('up'));
+                'callback', @(~,~) scroll_y('up'));
             obj.ybuts(5) = uicontrol('Parent', obj.panel, 'String','<html>+</html>',...
-                'callback', @(~,~) obj.fig_cache.zoom_y('in'));
+                'callback', @(~,~) zoom_y('in'));
+            
+            function zoom_y(str)
+                if strcmp(str,'in')
+                    obj.axes.YLim = 10.^(log10(get(obj.axes,'YLim')) + [1 -1]);
+                elseif strcmp(str,'out')
+                    obj.axes.YLim = 10.^(log10(get(obj.axes,'YLim')) + [-1 1]);
+                end
+            end
+            
+            function scroll_y(str)
+                if strcmp(str,'up')
+                    obj.axes.YLim = 10.^(log10(get(obj.axes,'YLim')) + [1 1]);
+                elseif strcmp(str,'down')
+                    obj.axes.YLim = 10.^(log10(get(obj.axes,'YLim')) + [-1 -1]);
+                end
+            end
+            
+            function reset_fig
+                obj.axes.YLim = [1e-12, 1e-4];
+                obj.axes.XLim = [1 3e4];
+            end
 
             % top
             obj.tbuts = [];
@@ -478,9 +524,8 @@ classdef DataAcquisition < handle
                 set(button,'String','Pause');
             end
             try
-                obj.fig_cache.clear_fig;
                 % add listener for data
-                obj.DAQ.s.NotifyWhenDataAvailableExceeds = 60000; % update every 2 seconds (30kHz)
+                obj.DAQ.s.NotifyWhenDataAvailableExceeds = 2^16;
                 obj.DAQ.listeners.noise = addlistener(obj.DAQ.s, 'DataAvailable', ...
                     @(~,event) obj.plotNoise(event));
                 % start DAQ session
@@ -509,14 +554,15 @@ classdef DataAcquisition < handle
         function plotNoise(obj, evt)
             % Calculate the noise power spectral density, and plot it
             % calculation
-            sfreq = 1/(evt.Data(2,1)-evt.Data(1,1));
-            fftsize = min(size(evt.Data,1),2^17);
+            sfreq = 30000;
+            fftsize = min(size(evt.Data,1),2^16);
             dfft = sfreq*abs(fft(evt.Data(:,2))).^2/fftsize;
+            dfft = dfft(1:fftsize/2+1);
             dfft = 2*dfft;
-            f = sfreq*(0:fftsize-1)/fftsize; % frequency range
-            imax = floor(size(dfft,1)/2); % Nyquist frequency range
+            f = sfreq*(0:fftsize/2)/fftsize; % frequency range
             % plot
-            plot(obj.axes, f(1:imax)', dfft(1:imax,1));
+            cla(obj.axes);
+            plot(obj.axes, f', dfft);
             drawnow;
         end
         

@@ -27,6 +27,15 @@ classdef figure_cache < handle
             obj.xmax = xm;
             obj.xdata = linspace(0,xm,obj.pts)';
             obj.ydata = nan(obj.pts,nsigs);
+            ylim([-obj.ymax obj.ymax]);
+        end
+        
+        function reset_fig(obj)
+            % resets the axes limits and clears figure
+            obj.xmax = 5;
+            obj.xdata = linspace(0,obj.xmax,obj.pts)';
+            obj.clear_fig;
+            ylim([-obj.ymax obj.ymax]);
         end
         
         function clear_fig(obj)
@@ -38,11 +47,9 @@ classdef figure_cache < handle
             obj.ydata = nan(obj.pts,obj.nsigs);
             plot(obj.ax, obj.xdata, obj.ydata);
             xlim([0 obj.xmax]);
-            ylim([-obj.ymax obj.ymax]);
             xlabel('Time (s)');
             ylabel('Current (pA)')
             grid(obj.ax,'on');
-            grid(obj.ax,'minor');
         end
         
         function update_cache(obj, newdata)
