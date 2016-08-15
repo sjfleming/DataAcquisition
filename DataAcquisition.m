@@ -485,7 +485,7 @@ classdef DataAcquisition < handle
                 obj.fig_cache.clear_fig;
                 % add listener for data
                 obj.DAQ.s.NotifyWhenDataAvailableExceeds = 60000; % update every 2 seconds (30kHz)
-                obj.DAQ.listeners.plot = addlistener(obj.DAQ.s, 'DataAvailable', ...
+                obj.DAQ.listeners.noise = addlistener(obj.DAQ.s, 'DataAvailable', ...
                     @(~,event) plotNoise(event));
                 % start DAQ session
                 obj.DAQ.s.startBackground;
