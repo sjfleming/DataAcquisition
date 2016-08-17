@@ -20,6 +20,7 @@ classdef DataAcquisition < handle
         file        % Information about the next data file to be saved
         mode        % Which program is running: normal, noise, iv, sealtest
         alpha       % Conversion factors from input to real signal
+        outputAlpha % Conversion factor for output
         channels    % Channels for data acquisition
         sampling    % Sampling frequency for input channels
     end 
@@ -46,6 +47,7 @@ classdef DataAcquisition < handle
             obj.channels = inputs.Channels;
             obj.alpha = inputs.Alphas;
             obj.sampling = inputs.SampleFrequency;
+            obj.outputAlpha = inputs.OutputAlpha;
             
             % Initialize DAQ
             function startDAQ(~,~)
@@ -57,7 +59,7 @@ classdef DataAcquisition < handle
                     obj.DAQ.ao = daq.createSession('ni');
                     addAnalogOutputChannel(obj.DAQ.ao, 'Dev1', 'ao0', 'Voltage');
                     obj.DAQ.ao.Rate = 100;
-                    queueOutputData(obj.DAQ.ao, zeros(100,1));
+                    %queueOutputData(obj.DAQ.ao, zeros(100,1));
                     
                     obj.DAQ.s.IsContinuous = true;
                     obj.DAQ.ao.IsContinuous = true;
@@ -141,7 +143,7 @@ classdef DataAcquisition < handle
             uimenu(f,'Label','Choose Save Location','Callback',@setFileLocation);
             uimenu(f,'Label','Normal acquisition','Callback',@(~,~) obj.normalMode);
             uimenu(f,'Label','IV curve','Callback',@(~,~) obj.ivMode);
-            uimenu(f,'Label','Live noise plot','Callback',@(~,~) obj.noiseMode);
+            uimenu(f,'Label','Noise plot','Callback',@(~,~) obj.noiseMode);
             uimenu(f,'Label','Membrane seal test','Callback',@(~,~) obj.sealtestMode);
             uimenu(f,'Label','Quit','Callback',@closeProg);
             hm = uimenu('Label','Help');
@@ -623,7 +625,7 @@ classdef DataAcquisition < handle
                 prefix = [num2str(c(1)) '_' sprintf('%02d',c(2)) '_' sprintf('%02d',c(3))];
                 % if there is a file with the same name in this folder
                 num = obj.file.num;
-                while ~isempty(ls([obj.file.folder prefix '_' sprintf('%04d',num) obj.file.suffix]))
+                while ~isempty(ls([obj.file.folder prefix '_' sprintf('%04d',num) '*']))
                     num = num + 1; % increment the file number for the next file
                 end
                 % update the handle info
@@ -668,7 +670,7 @@ classdef DataAcquisition < handle
         end
         
         function showDataAndRecord(obj, evt, fid)
-            data = [evt.TimeStamps, repmat([1, obj.alpha],size(evt.Data,1),[]) .* evt.Data]' ;
+            data = [evt.TimeStamps, repmat(obj.alpha,size(evt.Data,1),1) .* evt.Data];
             fwrite(fid,data,'double');
             obj.fig_cache.update_cache([evt.TimeStamps, evt.Data]);
             obj.fig_cache.draw_fig_now();
@@ -714,7 +716,7 @@ classdef DataAcquisition < handle
             % Calculate the noise power spectral density, and plot it
             % calculation
             fftsize = min(size(evt.Data,1),2^16);
-            dfft = obj.sampling*abs(fft(obj.alpha(1)*evt.Data(:,2))).^2/fftsize; % fft!
+            dfft = obj.sampling*abs(fft(obj.alpha(1)*evt.Data(:,1))).^2/fftsize; % fft!
             dfft = dfft(1:fftsize/2+1);
             dfft = 2*dfft;
             f = obj.sampling*(0:fftsize/2)/fftsize; % frequency range
@@ -736,13 +738,68 @@ classdef DataAcquisition < handle
                 set(button,'String','Stop');
             end
             try
+                % get the desired sweep from user
+                holdtime = 0.1; % in seconds, hold at 0mV before and after
+                prompt = {'Starting voltage (mV):', ...
+                    'Step by (mV):', ...
+                    'Ending voltage (mV)', ...
+                    'Duration of each voltage (ms):'};
+                dlg_title = 'IV curve setup';
+                defaultans = {'-200','10','200','200'};
+                answer = inputdlg(prompt,dlg_title,1,defaultans);
+                answer = str2double(answer);
+                V = linspace(answer(1),answer(3),(answer(3)-answer(1))/answer(2)+1)*0.001; % in Volts
+                t = answer(4)*0.001; % time in seconds
                 
+                % program the output voltages
+                for i = 1:numel(V)
+                    queueOutputData(obj.DAQ.ao,[zeros(1,100*holdtime), ...
+                        V(i)*ones(1,100*t), ...
+                        zeros(1,100*holdtime)]'*obj.outputAlpha);
+                end
+                
+                % make sure not to write over an existing file
+                c = clock; % update date prefix
+                prefix = [num2str(c(1)) '_' sprintf('%02d',c(2)) '_' sprintf('%02d',c(3))];
+                % if there is a file with the same name in this folder
+                num = obj.file.num;
+                while ~isempty(ls([obj.file.folder prefix '_' sprintf('%04d',num) '*']))
+                    num = num + 1; % increment the file number for the next file
+                end
+                % update the handle info
+                obj.file.name = [obj.file.folder prefix '_' sprintf('%04d',num) '_IV' obj.file.suffix];
+                obj.file.prefix = prefix;
+                obj.file.num = num;
+                % get new file ready and open
+                obj.file.fid = fopen(obj.file.name,'w');
+                display('Saving data to');
+                display(obj.file.name);
+                
+                % how to plot
+                obj.DAQ.s.NotifyWhenDataAvailableExceeds = 2*obj.sampling*holdtime + obj.sampling*t; % points in each sweep
+                obj.DAQ.listeners.IVsweep = addlistener(obj.DAQ.s, 'DataAvailable', ...
+                    @(~,event) obj.plotIV(event, holdtime, 2*holdtime+t, obj.file.fid));
+                cla(obj.axes(1));
+                obj.axes(1).YLim = [-Inf, Inf];
+                obj.axes(1).XLim = [0, 2*holdtime+t];
+                cla(obj.axes(2));
+                
+                % start DAQ session
+                obj.DAQ.ao.startBackground;
+                obj.DAQ.s.startBackground;
+                
+                % wait until done and then kill it
+                display(num2str(numel(V)*(2*holdtime+t)))
+                pause(numel(V)*(2*holdtime+t));
+                obj.stopIV(button);
             catch ex
                 
             end
         end
         
         function stopIV(obj, button)
+            % stop the IV curve stuff
+            display('stopping')
             try
                 set(button,'CData',imread('Play.png'));
                 set(button,'String','');
@@ -750,10 +807,30 @@ classdef DataAcquisition < handle
                 set(button,'String','Start');
             end
             try
-                
+                fclose(obj.file.fid);
+                obj.DAQ.s.stop;
+                obj.DAQ.ao.stop;
+                delete(obj.DAQ.listeners.IVsweep);
             catch ex
                 
             end
+        end
+        
+        function plotIV(obj, evt, holdtime, sweeptime, fid)
+            % when a full sweep of data comes in, this event fires
+            % plots the sweep on axis 1
+            % plots a mean data point on axis 2
+            
+            % save the data to a file
+            data = [evt.TimeStamps, repmat(obj.alpha,size(evt.Data,1),1) .* evt.Data];
+            fwrite(fid,data,'double');
+            
+            % plot the data
+            plot(obj.axes(1), linspace(0,sweeptime,size(evt.Data,1)), evt.Data(:,1), 'Color', 'k');
+            obj.axes(1).YLim = [-Inf, Inf];
+            voltage = mean(evt.Data((obj.sampling*holdtime):(end-obj.sampling*holdtime),2)*obj.alpha(2))*1000; % mV
+            current = mean(evt.Data((obj.sampling*holdtime):(end-obj.sampling*holdtime),1)*obj.alpha(1));
+            plot(obj.axes(2), voltage, current, 'ok');
         end
         
         function startSealTest(obj, button)
@@ -821,7 +898,7 @@ classdef DataAcquisition < handle
                 defaultAlpha = [1, 1];
                 checkAlpha = @(x) all([isnumeric(x), arrayfun(@(y) y>0, x), ...
                     numel(x)>0, numel(x)<=4]);
-                defaultOutputAlpha = 1;
+                defaultOutputAlpha = 10;
                 checkOutputAlpha = @(x) all([isnumeric(x), numel(x)==1, x>0]);
                 
                 % set up the inputs
