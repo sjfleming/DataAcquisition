@@ -2,13 +2,26 @@ classdef DataAcquisition < handle
 % DATAACQUISITION is a Matlab program for electronic signal acquistion from
 % an NI-DAQ USB 6003.
 
+% This software was written with Patch Clamp and electrophysiological
+% measurements in mind, although it could also be used as a simple
+% oscilloscope and data recording tool.
+% DataAcquisition has the following modes of operation:
+% "Normal Acquisition":
+%   
+% Use of the functionality specific to electrophysiology measurements (IV
+% curve and membrane seal test) require the analog output terminal ao0 to
+% be connected to an external command input on the current amplifier.
+
 % Stephen Fleming 2016.08.13
 
     properties
         fig         % Handle for the entire DataAcquisition figure
         DAQ         % Matlab DAQ object handle
         file        % Information about the next data file to be saved
-        mode        % Which program is running: normal, noise, iv
+        mode        % Which program is running: normal, noise, iv, sealtest
+        alpha       % Conversion factors from input to real signal
+        channels    % Channels for data acquisition
+        sampling    % Sampling frequency for input channels
     end 
     
     properties (Hidden=true)
@@ -25,15 +38,21 @@ classdef DataAcquisition < handle
 
     methods (Hidden=true)
         
-        function obj = DataAcquisition()
+        function obj = DataAcquisition(varargin)
             % Constructor
             
+            % Handle inputs
+            inputs = obj.parseInputs(varargin);
+            obj.channels = inputs.Channels;
+            obj.alpha = inputs.Alphas;
+            obj.sampling = inputs.SampleFrequency;
+            
+            % Initialize DAQ
             function startDAQ(~,~)
-                % Initialize DAQ
                 try
                     obj.DAQ.s = daq.createSession('ni');
-                    addAnalogInputChannel(obj.DAQ.s, 'Dev1', 0:1, 'Voltage');
-                    obj.DAQ.s.Rate = 30000;
+                    addAnalogInputChannel(obj.DAQ.s, 'Dev1', obj.channels, 'Voltage');
+                    obj.DAQ.s.Rate = obj.sampling;
                     
                     obj.DAQ.ao = daq.createSession('ni');
                     addAnalogOutputChannel(obj.DAQ.ao, 'Dev1', 'ao0', 'Voltage');
@@ -89,6 +108,12 @@ classdef DataAcquisition < handle
                 catch ex
                     
                 end
+                % delete the DataAcquistion object
+                try
+                    delete(obj);
+                catch ex
+                    
+                end
             end
             
             % Create figure ===============================================
@@ -117,6 +142,7 @@ classdef DataAcquisition < handle
             uimenu(f,'Label','Normal acquisition','Callback',@(~,~) obj.normalMode);
             uimenu(f,'Label','IV curve','Callback',@(~,~) obj.ivMode);
             uimenu(f,'Label','Live noise plot','Callback',@(~,~) obj.noiseMode);
+            uimenu(f,'Label','Membrane seal test','Callback',@(~,~) obj.sealtestMode);
             uimenu(f,'Label','Quit','Callback',@closeProg);
             hm = uimenu('Label','Help');
             uimenu(hm,'Label','DataAcquisition','Callback',@(~,~) doc('DataAcquisition.m'));
@@ -132,18 +158,14 @@ classdef DataAcquisition < handle
         
         function normalMode(obj)
             % stop other things that might have been running
-            try
-                obj.stopNoiseDisplay([]);
-            catch ex
-                
-            end
+            obj.stopAll;
             
             % set default positions
             obj.normalSizing;
             obj.normalResizeFcn;
 
             % Initialize figure cache
-            obj.fig_cache = figure_cache(obj.axes, 2, 5);
+            obj.fig_cache = figure_cache(obj.axes, obj.alpha, 5);
 
             % Show figure
             obj.fig.Visible = 'on';
@@ -151,8 +173,10 @@ classdef DataAcquisition < handle
         end
         
         function normalSizing(obj)
+            delete(obj.panel);
             obj.panel = uipanel('Parent',obj.fig,'Position',[0 0 1 1]);
-
+            
+            delete(obj.axes);
             obj.axes = axes('Parent',obj.panel,'Position',[0.05 0.05 0.95 0.90],...
                 'GridLineStyle','-','XColor', 0.15*[1 1 1],'YColor', 0.15*[1 1 1]);
             set(obj.axes,'NextPlot','add','XLimMode','manual');
@@ -201,7 +225,7 @@ classdef DataAcquisition < handle
             obj.normalResizeFcn;
 
             % Initialize figure cache
-            obj.fig_cache = figure_cache(obj.panel, 2, 5);
+            obj.fig_cache = figure_cache(obj.axes, obj.alpha, 5);
 
             % Show figure
             obj.fig.Visible = 'on';
@@ -216,7 +240,7 @@ classdef DataAcquisition < handle
             sz(3) = sz(3) - sz(1); % width
             sz(2) = sz(2) + obj.DEFS.PADDING + obj.DEFS.LABELWIDTH + obj.DEFS.BUTTONSIZE; % bottom
             sz(4) = sz(4) - sz(2) - obj.DEFS.BIGBUTTONSIZE - 3*obj.DEFS.PADDING; % height
-            set(obj.axes,'Position',sz,'Units','Pixels');
+            set(obj.axes,'Position',max(1,sz),'Units','Pixels');
             % get size of axes in pixels
             sz = obj.getPixelPos(obj.axes);
             % figure out where the y middle is
@@ -224,42 +248,33 @@ classdef DataAcquisition < handle
             % position the buttons
             for i=1:numel(obj.ybuts)
                 set(obj.ybuts(i),'Position',...
-                    [obj.DEFS.PADDING, ...
+                    max(1,[obj.DEFS.PADDING, ...
                     mid+(i-numel(obj.ybuts)/2-1)*obj.DEFS.BUTTONSIZE, ...
                     obj.DEFS.BUTTONSIZE, ...
-                    obj.DEFS.BUTTONSIZE]);
+                    obj.DEFS.BUTTONSIZE]));
             end
             % figure out where the x middle is
             mid = sz(3)/2 + sz(1);
             % position the buttons
             for i=1:numel(obj.xbuts)
                 set(obj.xbuts(i),'Position',...
-                    [mid+(i-numel(obj.xbuts)/2-1)*obj.DEFS.BUTTONSIZE, ...
+                    max(1,[mid+(i-numel(obj.xbuts)/2-1)*obj.DEFS.BUTTONSIZE, ...
                     obj.DEFS.PADDING, ...
                     obj.DEFS.BUTTONSIZE, ...
-                    obj.DEFS.BUTTONSIZE]);
+                    obj.DEFS.BUTTONSIZE]));
             end
             for i=1:numel(obj.tbuts)
                 set(obj.tbuts(i),'Position',...
-                    [mid+(i-numel(obj.tbuts)/2-1)*obj.DEFS.BIGBUTTONSIZE, ...
+                    max(1,[mid+(i-numel(obj.tbuts)/2-1)*obj.DEFS.BIGBUTTONSIZE, ...
                     sz(2) + sz(4) + obj.DEFS.PADDING, ...
                     obj.DEFS.BIGBUTTONSIZE, ...
-                    obj.DEFS.BIGBUTTONSIZE]);
+                    obj.DEFS.BIGBUTTONSIZE]));
             end
         end
 
         function noiseMode(obj)
             % stop other things that might have been running
-            try
-                obj.stopPlay([]);
-            catch ex
-                
-            end
-            try
-                obj.stopRecord([]);
-            catch ex
-                
-            end
+            obj.stopAll;
             
             % set default positions
             obj.noiseSizing;
@@ -274,8 +289,10 @@ classdef DataAcquisition < handle
         end
         
         function noiseSizing(obj)
+            delete(obj.panel);
             obj.panel = uipanel('Parent',obj.fig,'Position',[0 0 1 1]);
-
+            
+            delete(obj.axes);
             obj.axes = axes('Parent',obj.panel,'Position',[0.05 0.05 0.95 0.90],...
                 'GridLineStyle','-','XColor', 0.15*[1 1 1],'YColor', 0.15*[1 1 1]);
             set(obj.axes,'NextPlot','add','XLimMode','manual');
@@ -348,9 +365,135 @@ classdef DataAcquisition < handle
             sz(3) = sz(3) - sz(1); % width
             sz(2) = sz(2) + obj.DEFS.PADDING + obj.DEFS.LABELWIDTH; % bottom
             sz(4) = sz(4) - sz(2) - obj.DEFS.BIGBUTTONSIZE - 3*obj.DEFS.PADDING; % height
-            set(obj.axes,'Position',sz,'Units','Pixels');
+            set(obj.axes,'Position',max(1,sz),'Units','Pixels');
             % get size of axes in pixels
             sz = obj.getPixelPos(obj.axes);
+            % figure out where the y middle is
+            mid = sz(4)/2 + sz(2);
+            % position the buttons
+            for i=1:numel(obj.ybuts)
+                set(obj.ybuts(i),'Position',...
+                    max(1,[obj.DEFS.PADDING, ...
+                    mid+(i-numel(obj.ybuts)/2-1)*obj.DEFS.BUTTONSIZE, ...
+                    obj.DEFS.BUTTONSIZE, ...
+                    obj.DEFS.BUTTONSIZE]));
+            end
+            % figure out where the x middle is
+            mid = sz(3)/2 + sz(1);
+            % position the buttons
+            for i=1:numel(obj.tbuts)
+                set(obj.tbuts(i),'Position',...
+                    max(1,[mid+(i-numel(obj.tbuts)/2-1)*obj.DEFS.BIGBUTTONSIZE, ...
+                    sz(2) + sz(4) + obj.DEFS.PADDING, ...
+                    obj.DEFS.BIGBUTTONSIZE, ...
+                    obj.DEFS.BIGBUTTONSIZE]));
+            end
+        end
+        
+        function ivMode(obj)
+            % stop other things that might have been running
+            obj.stopAll;
+            
+            % set default positions
+            obj.ivSizing;
+            obj.ivResizeFcn;
+
+            % No figure cache necessary
+            obj.fig_cache = [];
+
+            % Show figure
+            obj.fig.Visible = 'on';
+
+        end
+        
+        function ivSizing(obj)
+            delete(obj.panel);
+            obj.panel = uipanel('Parent',obj.fig,'Position',[0 0 1 1]);
+            
+            delete(obj.axes);
+            obj.axes(1) = axes('Parent',obj.panel,'Position',[0.05 0.05 0.45 0.90],...
+                'GridLineStyle','-','XColor', 0.15*[1 1 1],'YColor', 0.15*[1 1 1]);
+            set(obj.axes(1),'NextPlot','add','XLimMode','manual');
+            set(obj.axes(1),'XGrid','on','YGrid','on','Tag','Axes','Box','on');
+            obj.axes(1).YLabel.String = 'Current (nA)';
+            obj.axes(1).YLabel.Color = 'k';
+            obj.axes(1).XLabel.String = 'Time (s)';
+            obj.axes(1).XLabel.Color = 'k';
+            obj.axes(1).YLim = [-1, 1];
+            obj.axes(1).XLim = [0 2];
+            
+            obj.axes(2) = axes('Parent',obj.panel,'Position',[0.55 0.05 0.45 0.90],...
+                'GridLineStyle','-','XColor', 0.15*[1 1 1],'YColor', 0.15*[1 1 1]);
+            set(obj.axes(2),'NextPlot','add','XLimMode','manual');
+            set(obj.axes(2),'XGrid','on','YGrid','on','Tag','Axes','Box','on');
+            obj.axes(2).YLabel.String = 'Mean Current (nA)';
+            obj.axes(2).YLabel.Color = 'k';
+            obj.axes(2).XLabel.String = 'Voltage (mV)';
+            obj.axes(2).XLabel.Color = 'k';
+            obj.axes(2).YLim = [-1 1];
+            obj.axes(2).XLim = [-200 200];
+
+            % now make the buttons
+
+            % y-axis
+            obj.ybuts = [];
+            obj.ybuts(1) = uicontrol('Parent', obj.panel, 'String','<html>-</html>',...
+                'callback', @(~,~) zoom_y('out'));
+            obj.ybuts(2) = uicontrol('Parent', obj.panel, 'String','<html>&darr;</html>',...
+                'callback', @(~,~) scroll_y('down'));
+            obj.ybuts(3) = uicontrol('Parent', obj.panel, 'String','<html>R</html>',...
+                'callback', @(~,~) reset_fig);
+            obj.ybuts(4) = uicontrol('Parent', obj.panel, 'String','<html>&uarr;</html>',...
+                'callback', @(~,~) scroll_y('up'));
+            obj.ybuts(5) = uicontrol('Parent', obj.panel, 'String','<html>+</html>',...
+                'callback', @(~,~) zoom_y('in'));
+            
+            function zoom_y(str)
+                if strcmp(str,'in')
+                    obj.axes.YLim = 1/2*get(obj.axes(1),'YLim');
+                elseif strcmp(str,'out')
+                    obj.axes.YLim = 1/2*get(obj.axes(1),'YLim');
+                end
+            end
+            
+            function scroll_y(str)
+                if strcmp(str,'up')
+                    obj.axes.YLim = get(obj.axes(1),'YLim') + [1 1]*diff(get(obj.axes(1),'YLim'))/5;
+                elseif strcmp(str,'down')
+                    obj.axes.YLim = get(obj.axes(1),'YLim') - [1 1]*diff(get(obj.axes(1),'YLim'))/5;
+                end
+            end
+            
+            function reset_fig
+                obj.axes.YLim = [-1 1];
+                obj.axes.XLim = [0 2];
+            end
+
+            % top
+            obj.tbuts = [];
+            obj.tbuts(1) = uicontrol('Parent', obj.panel, ...
+                'Style', 'togglebutton', 'CData', imread('Play.png'),...
+                'callback', @(src,~) obj.stateDecision(src), 'tag', 'iv');
+
+            % set the resize function
+            set(obj.panel, 'ResizeFcn', @(~,~) obj.ivResizeFcn);
+            % and call it to set default positions
+            obj.ivResizeFcn;
+
+            % Show figure
+            obj.fig.Visible = 'on';
+
+        end
+        
+        function ivResizeFcn(obj)
+            % position the axes1 object
+            sz = obj.getPixelPos(obj.panel);
+            sz(1) = sz(1) + obj.DEFS.PADDING + obj.DEFS.LABELWIDTH + obj.DEFS.BUTTONSIZE; % left
+            sz(3) = sz(3)/2 - obj.DEFS.PADDING - 1.5*obj.DEFS.LABELWIDTH - obj.DEFS.BUTTONSIZE - 2*obj.DEFS.PADDING; % width
+            sz(2) = sz(2) + obj.DEFS.PADDING + obj.DEFS.LABELWIDTH; % bottom
+            sz(4) = sz(4) - sz(2) - obj.DEFS.BIGBUTTONSIZE - 3*obj.DEFS.PADDING; % height
+            set(obj.axes(1),'Position',max(1,sz),'Units','Pixels');
+            set(obj.axes(1),'Position',max(1,sz),'Units','Pixels');
             % figure out where the y middle is
             mid = sz(4)/2 + sz(2);
             % position the buttons
@@ -361,15 +504,23 @@ classdef DataAcquisition < handle
                     obj.DEFS.BUTTONSIZE, ...
                     obj.DEFS.BUTTONSIZE]);
             end
-            % figure out where the x middle is
-            mid = sz(3)/2 + sz(1);
-            % position the buttons
+            % position the axes2 object
+            sz = obj.getPixelPos(obj.panel);
+            sz(1) = sz(1) + sz(3)/2 + obj.DEFS.PADDING + obj.DEFS.LABELWIDTH + obj.DEFS.BUTTONSIZE; % left
+            sz(3) = sz(3)/2 - obj.DEFS.PADDING - 1.5*obj.DEFS.LABELWIDTH - obj.DEFS.BUTTONSIZE - 2*obj.DEFS.PADDING; % width
+            sz(2) = sz(2) + obj.DEFS.PADDING + obj.DEFS.LABELWIDTH; % bottom
+            sz(4) = sz(4) - sz(2) - obj.DEFS.BIGBUTTONSIZE - 3*obj.DEFS.PADDING; % height
+            set(obj.axes(2),'Position',max(1,sz),'Units','Pixels');
+            % position the top button
+            bottom = sz(2) + sz(4) + obj.DEFS.PADDING;
+            sz = obj.getPixelPos(obj.panel);
+            mid = sz(1)+sz(3)/2;
             for i=1:numel(obj.tbuts)
                 set(obj.tbuts(i),'Position',...
-                    [mid+(i-numel(obj.tbuts)/2-1)*obj.DEFS.BIGBUTTONSIZE, ...
-                    sz(2) + sz(4) + obj.DEFS.PADDING, ...
+                    max(1,[mid+(i-numel(obj.tbuts)/2-1)*obj.DEFS.BIGBUTTONSIZE, ...
+                    bottom, ...
                     obj.DEFS.BIGBUTTONSIZE, ...
-                    obj.DEFS.BIGBUTTONSIZE]);
+                    obj.DEFS.BIGBUTTONSIZE]));
             end
         end
         
@@ -408,40 +559,15 @@ classdef DataAcquisition < handle
                     % we are stopped
                     obj.stopNoiseDisplay(src);
                 end
-                
-            end
-        end
-        
-        function stopPlay(obj, button)
-            % Data viewing off
-            try
-                set(button,'CData',imread('Play.png'));
-                set(button,'String','');
-            catch ex
-                set(button,'String','Play');
-            end
-            try
-                obj.DAQ.s.stop;
-                delete(obj.DAQ.listeners.plot);
-            catch ex
-                
-            end
-        end
-        
-        function stopRecord(obj, button)
-            % Data viewing and recording off
-            try
-                set(button,'CData',imread('Record.png'));
-                set(button,'String','');
-            catch ex
-                set(button,'String','Record');
-            end
-            try
-                fclose(obj.file.fid);
-                obj.DAQ.s.stop;
-                delete(obj.DAQ.listeners.logAndPlot);
-            catch ex
-                
+            elseif strcmp(get(src,'tag'),'iv')
+                button_state = get(src,'Value');
+                if button_state == get(src,'Max')
+                    % we are in noise display mode
+                    obj.startIV(src);
+                else
+                    % we are stopped
+                    obj.stopIV(src);
+                end
             end
         end
         
@@ -462,6 +588,22 @@ classdef DataAcquisition < handle
                 obj.DAQ.s.startBackground;
             catch ex
                 display('Error.')
+            end
+        end
+        
+        function stopPlay(obj, button)
+            % Data viewing off
+            try
+                set(button,'CData',imread('Play.png'));
+                set(button,'String','');
+            catch ex
+                set(button,'String','Play');
+            end
+            try
+                obj.DAQ.s.stop;
+                delete(obj.DAQ.listeners.plot);
+            catch ex
+                
             end
         end
         
@@ -503,13 +645,30 @@ classdef DataAcquisition < handle
             end
         end
         
+        function stopRecord(obj, button)
+            % Data viewing and recording off
+            try
+                set(button,'CData',imread('Record.png'));
+                set(button,'String','');
+            catch ex
+                set(button,'String','Record');
+            end
+            try
+                fclose(obj.file.fid);
+                obj.DAQ.s.stop;
+                delete(obj.DAQ.listeners.logAndPlot);
+            catch ex
+                
+            end
+        end
+        
         function showData(obj, evt)
             obj.fig_cache.update_cache([evt.TimeStamps, evt.Data]);
             obj.fig_cache.draw_fig_now();
         end
         
         function showDataAndRecord(obj, evt, fid)
-            data = [evt.TimeStamps, evt.Data]' ;
+            data = [evt.TimeStamps, repmat([1, obj.alpha],size(evt.Data,1),[]) .* evt.Data]' ;
             fwrite(fid,data,'double');
             obj.fig_cache.update_cache([evt.TimeStamps, evt.Data]);
             obj.fig_cache.draw_fig_now();
@@ -554,16 +713,89 @@ classdef DataAcquisition < handle
         function plotNoise(obj, evt)
             % Calculate the noise power spectral density, and plot it
             % calculation
-            sfreq = 30000;
             fftsize = min(size(evt.Data,1),2^16);
-            dfft = sfreq*abs(fft(evt.Data(:,2))).^2/fftsize;
+            dfft = obj.sampling*abs(fft(obj.alpha(1)*evt.Data(:,2))).^2/fftsize; % fft!
             dfft = dfft(1:fftsize/2+1);
             dfft = 2*dfft;
-            f = sfreq*(0:fftsize/2)/fftsize; % frequency range
+            f = obj.sampling*(0:fftsize/2)/fftsize; % frequency range
             % plot
             cla(obj.axes);
             plot(obj.axes, f', dfft);
             drawnow;
+        end
+        
+        function startIV(obj, button)
+            % Current versus voltage curve
+            % Apply -200:10:200mV for 200ms each (adjustable)
+            % Plot data
+            % Take the average current(voltage) and plot that as well
+            try
+                set(button,'CData',imread('Pause.png'));
+                set(button,'String','');
+            catch ex
+                set(button,'String','Stop');
+            end
+            try
+                
+            catch ex
+                
+            end
+        end
+        
+        function stopIV(obj, button)
+            try
+                set(button,'CData',imread('Play.png'));
+                set(button,'String','');
+            catch ex
+                set(button,'String','Start');
+            end
+            try
+                
+            catch ex
+                
+            end
+        end
+        
+        function startSealTest(obj, button)
+            % Membrane "seal test" display
+            % Apply a 5mV, 60Hz (adjustable) signal
+            % Measure current
+            % Display as would an oscilloscope on a trigger
+            
+        end
+        
+        function stopSealTest(obj, button)
+            
+            
+        end
+        
+        function stopAll(obj)
+            % stops all DAQ sessions and deletes all listeners
+            try
+                obj.stopNoiseDisplay([]);
+            catch ex
+                
+            end
+            try
+                obj.stopPlay([]);
+            catch ex
+                
+            end
+            try
+                obj.stopRecord([]);
+            catch ex
+                
+            end
+            try
+                obj.stopIV([]);
+            catch ex
+                
+            end
+            try
+                obj.stopSealTest([]);
+            catch ex
+                
+            end
         end
         
         function sz = getPixelPos(~, hnd)
@@ -571,6 +803,66 @@ classdef DataAcquisition < handle
             set(hnd,'Units','Pixels');
             sz = get(hnd,'Position');
             set(hnd,'Units',old_units);
+        end
+        
+        function in = parseInputs(obj, varargin)
+            try
+                % use inputParser to figure out all the inputs
+                p = inputParser;
+                varargin = varargin{:};
+
+                % defaults and checks
+                defaultSampleFreq = 30000;
+                checkSampleFreq = @(x) all([isnumeric(x), numel(x)==1, x>=10, x<=50000]);
+                defaultChannels = [0, 1];
+                checkChannels = @(x) all([isnumeric(x), arrayfun(@(y) y>=1, x), ...
+                    arrayfun(@(y) y<=4, x), numel(unique(x))==numel(x), ...
+                    numel(x)>0, numel(x)<=4]);
+                defaultAlpha = [1, 1];
+                checkAlpha = @(x) all([isnumeric(x), arrayfun(@(y) y>0, x), ...
+                    numel(x)>0, numel(x)<=4]);
+                defaultOutputAlpha = 1;
+                checkOutputAlpha = @(x) all([isnumeric(x), numel(x)==1, x>0]);
+                
+                % set up the inputs
+                if any(cellfun(@(x) strcmp(x,'Channels'), varargin))
+                    % if the number of channels is specified
+                    logic = cellfun(@(x) strcmp(x,'Channels'), varargin);
+                    ind = find(logic,1,'first'); % which index is the input 'Channels'
+                    chan = varargin{ind+1}; % vector of channels
+                    checkAlpha = @(x) all([isnumeric(x), arrayfun(@(y) y>0, x), numel(x)==numel(chan)]);
+                    % you are required to specify each alpha (channel conversion factor)
+                    addRequired(p,'Alphas',defaultAlpha,checkAlpha);
+                    % also redefine the sample frequency check
+                    checkSampleFreq = @(x) all([isnumeric(x),x>=10,x<=floor(100000/numel(chan))]);
+                else
+                    % assume number of channels equal to numel(alpha)
+                    logic = cellfun(@(x) strcmp(x,'Alphas'), varargin);
+                    if sum(logic)>0
+                        ind = find(logic,1,'first'); % which index is the input 'Channels'
+                        alphas = varargin{ind+1}; % vector of alphas
+                        defaultChannels = 0:1:numel(alphas);
+                    end
+                    addOptional(p,'Alphas',defaultAlpha,checkAlpha);
+                end
+                addOptional(p,'SampleFrequency',defaultSampleFreq,checkSampleFreq);
+                addOptional(p,'Channels',defaultChannels,checkChannels);
+                addOptional(p,'OutputAlpha',defaultOutputAlpha,checkOutputAlpha);
+                
+                % parse
+                parse(p,varargin{:});
+                in = p.Results;
+            catch ex
+                display('Invalid inputs to DataAcquisition.')
+                display('Valid name/value pair designations are:')
+                display('''SampleFrequency''')
+                display('''Channels''')
+                display('''Alphas''')
+                display('''OutputAlpha''')
+                display('''Channels'' is a maximum 4 element vector containing the integers 0 through 3.  E.g. [0, 1]')
+                display('Keep in mind that if you specify channels, you must specify the value of alpha for each of those channels.')
+                display('Example of a valid call: >> DataAcquisition(''Channels'',[0,1],''Alphas'',[0.1,1])')
+            end
         end
         
     end
