@@ -526,6 +526,123 @@ classdef DataAcquisition < handle
             end
         end
         
+        function sealtestMode(obj)
+            % stop other things that might have been running
+            obj.stopAll;
+            
+            % set default positions
+            obj.sealtestSizing;
+            obj.sealtestResizeFcn;
+
+            % No figure cache necessary
+            obj.fig_cache = [];
+
+            % Show figure
+            obj.fig.Visible = 'on';
+
+        end
+        
+        function sealtestSizing(obj)
+            delete(obj.panel);
+            obj.panel = uipanel('Parent',obj.fig,'Position',[0 0 1 1]);
+            
+            delete(obj.axes);
+            obj.axes = axes('Parent',obj.panel,'Position',[0.05 0.05 0.95 0.90],...
+                'GridLineStyle','-','XColor', 0.15*[1 1 1],'YColor', 0.15*[1 1 1]);
+            set(obj.axes,'NextPlot','add','XLimMode','manual');
+            set(obj.axes,'XGrid','on','YGrid','on','Tag','Axes','Box','on');
+            obj.axes.YLabel.String = 'Current (nA)';
+            obj.axes.YLabel.Color = 'k';
+            obj.axes.XLabel.String = 'Time (s)';
+            obj.axes.XLabel.Color = 'k';
+            obj.axes.YLim = [-1, 1];
+            obj.axes.XLim = [0, 2/60];
+
+            % now make the buttons
+
+            % y-axis
+            obj.ybuts = [];
+            obj.ybuts(1) = uicontrol('Parent', obj.panel, 'String','<html>-</html>',...
+                'callback', @(~,~) zoom_y('out'));
+            obj.ybuts(2) = uicontrol('Parent', obj.panel, 'String','<html>&darr;</html>',...
+                'callback', @(~,~) scroll_y('down'));
+            obj.ybuts(3) = uicontrol('Parent', obj.panel, 'String','<html>R</html>',...
+                'callback', @(~,~) reset_fig);
+            obj.ybuts(4) = uicontrol('Parent', obj.panel, 'String','<html>&uarr;</html>',...
+                'callback', @(~,~) scroll_y('up'));
+            obj.ybuts(5) = uicontrol('Parent', obj.panel, 'String','<html>+</html>',...
+                'callback', @(~,~) zoom_y('in'));
+            
+            function zoom_y(str)
+                if strcmp(str,'in')
+                    obj.axes.YLim = 10.^(log10(get(obj.axes,'YLim')) + [1 -1]);
+                elseif strcmp(str,'out')
+                    obj.axes.YLim = 10.^(log10(get(obj.axes,'YLim')) + [-1 1]);
+                end
+            end
+            
+            function scroll_y(str)
+                if strcmp(str,'up')
+                    obj.axes.YLim = 10.^(log10(get(obj.axes,'YLim')) + [1 1]);
+                elseif strcmp(str,'down')
+                    obj.axes.YLim = 10.^(log10(get(obj.axes,'YLim')) + [-1 -1]);
+                end
+            end
+            
+            function reset_fig
+                obj.axes.YLim = [-1, 1];
+                obj.axes.XLim = [0, 2/60];
+            end
+
+            % top
+            obj.tbuts = [];
+            obj.tbuts(1) = uicontrol('Parent', obj.panel, ...
+                'Style', 'togglebutton', 'CData', imread('Play.png'),...
+                'callback', @(src,~) obj.stateDecision(src), 'tag', 'noise');
+
+            % set the resize function
+            set(obj.panel, 'ResizeFcn', @(~,~) obj.sealtestResizeFcn);
+            % and call it to set default positions
+            obj.sealtestResizeFcn;
+
+            % Show figure
+            obj.fig.Visible = 'on';
+
+        end
+        
+        function sealtestResizeFcn(obj)
+            % get size of panel in pixels
+            sz = obj.getPixelPos(obj.panel);
+            % position the axes object
+            sz(1) = sz(1) + obj.DEFS.PADDING + obj.DEFS.LABELWIDTH + obj.DEFS.BUTTONSIZE; % left
+            sz(3) = sz(3) - sz(1); % width
+            sz(2) = sz(2) + obj.DEFS.PADDING + obj.DEFS.LABELWIDTH; % bottom
+            sz(4) = sz(4) - sz(2) - obj.DEFS.BIGBUTTONSIZE - 3*obj.DEFS.PADDING; % height
+            set(obj.axes,'Position',max(1,sz),'Units','Pixels');
+            % get size of axes in pixels
+            sz = obj.getPixelPos(obj.axes);
+            % figure out where the y middle is
+            mid = sz(4)/2 + sz(2);
+            % position the buttons
+            for i=1:numel(obj.ybuts)
+                set(obj.ybuts(i),'Position',...
+                    max(1,[obj.DEFS.PADDING, ...
+                    mid+(i-numel(obj.ybuts)/2-1)*obj.DEFS.BUTTONSIZE, ...
+                    obj.DEFS.BUTTONSIZE, ...
+                    obj.DEFS.BUTTONSIZE]));
+            end
+            % figure out where the x middle is
+            mid = sz(3)/2 + sz(1);
+            % position the buttons
+            for i=1:numel(obj.tbuts)
+                set(obj.tbuts(i),'Position',...
+                    max(1,[mid+(i-numel(obj.tbuts)/2-1)*obj.DEFS.BIGBUTTONSIZE, ...
+                    sz(2) + sz(4) + obj.DEFS.PADDING, ...
+                    obj.DEFS.BIGBUTTONSIZE, ...
+                    obj.DEFS.BIGBUTTONSIZE]));
+            end
+        end
+        
         function stateDecision(obj, src)
             % state machine for the main button presses
             if strcmp(get(src,'tag'),'play')
@@ -789,8 +906,7 @@ classdef DataAcquisition < handle
                 obj.DAQ.s.startBackground;
                 
                 % wait until done and then kill it
-                display(num2str(numel(V)*(2*holdtime+t)))
-                pause(numel(V)*(2*holdtime+t));
+                pause(numel(V)*(2*holdtime+t)); % THIS IS BAD... NEED EVENT
                 obj.stopIV(button);
             catch ex
                 
@@ -799,7 +915,6 @@ classdef DataAcquisition < handle
         
         function stopIV(obj, button)
             % stop the IV curve stuff
-            display('stopping')
             try
                 set(button,'CData',imread('Play.png'));
                 set(button,'String','');
@@ -835,15 +950,57 @@ classdef DataAcquisition < handle
         
         function startSealTest(obj, button)
             % Membrane "seal test" display
-            % Apply a 5mV, 60Hz (adjustable) signal
+            % Apply a 5mV square wave
             % Measure current
             % Display as would an oscilloscope on a trigger
-            
+            v = 0.005; % 5mV
+            length = 4; % number of points at 100Hz, so 4 pts is 40ms
+            try
+                set(button,'CData',imread('Pause.png'));
+                set(button,'String','');
+            catch ex
+                set(button,'String','Stop');
+            end
+            try
+                % program the output voltages
+                % somehow do indefinitely
+                    queueOutputData(obj.DAQ.ao,[zeros(1,round(length/2)), ...
+                        v*ones(1,length), ...
+                        zeros(1,round(length/2))]'*obj.outputAlpha);
+                end
+                
+                % how to plot
+                obj.DAQ.s.NotifyWhenDataAvailableExceeds = 2*obj.sampling*length/100; % points in each sweep
+                obj.DAQ.listeners.sealtest = addlistener(obj.DAQ.s, 'DataAvailable', ...
+                    @(~,event) obj.plotSealTest(event, holdtime, 2*length/100));
+                cla(obj.axes(1));
+                obj.axes(1).YLim = [-Inf, Inf];
+                obj.axes(1).XLim = [0, 2*length/100];
+                cla(obj.axes(2));
+                
+                % start DAQ session
+                obj.DAQ.s.startBackground;
+                obj.DAQ.ao.startBackground;
+            catch ex
+                
+            end
         end
         
         function stopSealTest(obj, button)
-            
-            
+            % stop the seal test
+            try
+                set(button,'CData',imread('Play.png'));
+                set(button,'String','');
+            catch ex
+                set(button,'String','Start');
+            end
+            try
+                obj.DAQ.s.stop;
+                obj.DAQ.ao.stop;
+                delete(obj.DAQ.listeners.sealtest);
+            catch ex
+                
+            end
         end
         
         function stopAll(obj)
