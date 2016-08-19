@@ -452,23 +452,28 @@ classdef DataAcquisition < handle
             
             function zoom_y(str)
                 if strcmp(str,'in')
-                    obj.axes.YLim = 1/2*get(obj.axes(1),'YLim');
+                    lims = 1/2*get(obj.axes(1),'YLim');
                 elseif strcmp(str,'out')
-                    obj.axes.YLim = 1/2*get(obj.axes(1),'YLim');
+                    lims = 2*get(obj.axes(1),'YLim');
                 end
+                obj.axes(1).YLim = lims;
+                obj.axes(2).YLim = lims;
             end
             
             function scroll_y(str)
                 if strcmp(str,'up')
-                    obj.axes.YLim = get(obj.axes(1),'YLim') + [1 1]*diff(get(obj.axes(1),'YLim'))/5;
+                    lims = get(obj.axes(1),'YLim') + [1 1]*diff(get(obj.axes(1),'YLim'))/5;
                 elseif strcmp(str,'down')
-                    obj.axes.YLim = get(obj.axes(1),'YLim') - [1 1]*diff(get(obj.axes(1),'YLim'))/5;
+                    lims = get(obj.axes(1),'YLim') - [1 1]*diff(get(obj.axes(1),'YLim'))/5;
                 end
+                obj.axes(1).YLim = lims;
+                obj.axes(2).YLim = lims;
             end
             
             function reset_fig
-                obj.axes.YLim = [-1 1];
-                obj.axes.XLim = [0 2];
+                obj.axes(1).YLim = [-1 1];
+                obj.axes(2).YLim = [-1 1];
+                obj.axes(1).XLim = [0 0.4];
             end
 
             % top
@@ -534,8 +539,8 @@ classdef DataAcquisition < handle
             obj.sealtestSizing;
             obj.sealtestResizeFcn;
 
-            % No figure cache necessary
-            obj.fig_cache = [];
+            % initialize figure cache
+            obj.fig_cache = [];%figure_cache(obj.axes, obj.alpha(1), 0.08);
 
             % Show figure
             obj.fig.Visible = 'on';
@@ -549,13 +554,13 @@ classdef DataAcquisition < handle
             delete(obj.axes);
             obj.axes = axes('Parent',obj.panel,'Position',[0.05 0.05 0.95 0.90],...
                 'GridLineStyle','-','XColor', 0.15*[1 1 1],'YColor', 0.15*[1 1 1]);
-            set(obj.axes,'NextPlot','add','XLimMode','manual');
+            set(obj.axes,'NextPlot','replacechildren','XLimMode','manual');
             set(obj.axes,'XGrid','on','YGrid','on','Tag','Axes','Box','on');
             obj.axes.YLabel.String = 'Current (nA)';
             obj.axes.YLabel.Color = 'k';
             obj.axes.XLabel.String = 'Time (s)';
             obj.axes.XLabel.Color = 'k';
-            obj.axes.YLim = [-1, 1];
+            obj.axes.YLim = [-0.1, 0.1];
             obj.axes.XLim = [0, 2/60];
 
             % now make the buttons
@@ -575,22 +580,22 @@ classdef DataAcquisition < handle
             
             function zoom_y(str)
                 if strcmp(str,'in')
-                    obj.axes.YLim = 10.^(log10(get(obj.axes,'YLim')) + [1 -1]);
+                    obj.axes.YLim = 1/2*get(obj.axes(1),'YLim');
                 elseif strcmp(str,'out')
-                    obj.axes.YLim = 10.^(log10(get(obj.axes,'YLim')) + [-1 1]);
+                    obj.axes.YLim = 2*get(obj.axes(1),'YLim');
                 end
             end
             
             function scroll_y(str)
                 if strcmp(str,'up')
-                    obj.axes.YLim = 10.^(log10(get(obj.axes,'YLim')) + [1 1]);
+                    obj.axes.YLim = get(obj.axes(1),'YLim') + [1 1]*diff(get(obj.axes(1),'YLim'))/5;
                 elseif strcmp(str,'down')
-                    obj.axes.YLim = 10.^(log10(get(obj.axes,'YLim')) + [-1 -1]);
+                    obj.axes.YLim = get(obj.axes(1),'YLim') - [1 1]*diff(get(obj.axes(1),'YLim'))/5;
                 end
             end
             
             function reset_fig
-                obj.axes.YLim = [-1, 1];
+                obj.axes.YLim = [-0.1, 0.1];
                 obj.axes.XLim = [0, 2/60];
             end
 
@@ -598,7 +603,7 @@ classdef DataAcquisition < handle
             obj.tbuts = [];
             obj.tbuts(1) = uicontrol('Parent', obj.panel, ...
                 'Style', 'togglebutton', 'CData', imread('Play.png'),...
-                'callback', @(src,~) obj.stateDecision(src), 'tag', 'noise');
+                'callback', @(src,~) obj.stateDecision(src), 'tag', 'sealtest');
 
             % set the resize function
             set(obj.panel, 'ResizeFcn', @(~,~) obj.sealtestResizeFcn);
@@ -686,6 +691,15 @@ classdef DataAcquisition < handle
                 else
                     % we are stopped
                     obj.stopIV(src);
+                end
+            elseif strcmp(get(src,'tag'),'sealtest')
+                button_state = get(src,'Value');
+                if button_state == get(src,'Max')
+                    % we are in seal test mode
+                    obj.startSealTest(src);
+                else
+                    % we are stopped
+                    obj.stopSealTest(src);
                 end
             end
         end
@@ -864,50 +878,57 @@ classdef DataAcquisition < handle
                 dlg_title = 'IV curve setup';
                 defaultans = {'-200','10','200','200'};
                 answer = inputdlg(prompt,dlg_title,1,defaultans);
-                answer = str2double(answer);
-                V = linspace(answer(1),answer(3),(answer(3)-answer(1))/answer(2)+1)*0.001; % in Volts
-                t = answer(4)*0.001; % time in seconds
-                
-                % program the output voltages
-                for i = 1:numel(V)
-                    queueOutputData(obj.DAQ.ao,[zeros(1,100*holdtime), ...
-                        V(i)*ones(1,100*t), ...
-                        zeros(1,100*holdtime)]'*obj.outputAlpha);
+                if isempty(answer) % user pressed 'cancel'
+                    obj.stopIV(button);
+                    set(button,'Value',0);
+                else % user entered an IV program
+                    answer = str2double(answer);
+                    V = linspace(answer(1),answer(3),(answer(3)-answer(1))/answer(2)+1)*0.001; % in Volts
+                    t = answer(4)*0.001; % time in seconds
+
+                    % program the output voltages
+                    for i = 1:numel(V)
+                        queueOutputData(obj.DAQ.ao,[zeros(1,100*holdtime), ...
+                            V(i)*ones(1,100*t), ...
+                            zeros(1,100*holdtime)]'*obj.outputAlpha);
+                    end
+
+                    % make sure not to write over an existing file
+                    c = clock; % update date prefix
+                    prefix = [num2str(c(1)) '_' sprintf('%02d',c(2)) '_' sprintf('%02d',c(3))];
+                    % if there is a file with the same name in this folder
+                    num = obj.file.num;
+                    while ~isempty(ls([obj.file.folder prefix '_' sprintf('%04d',num) '*']))
+                        num = num + 1; % increment the file number for the next file
+                    end
+                    % update the handle info
+                    obj.file.name = [obj.file.folder prefix '_' sprintf('%04d',num) '_IV' obj.file.suffix];
+                    obj.file.prefix = prefix;
+                    obj.file.num = num;
+                    % get new file ready and open
+                    obj.file.fid = fopen(obj.file.name,'w');
+                    display('Saving data to');
+                    display(obj.file.name);
+
+                    % how to plot
+                    obj.DAQ.s.NotifyWhenDataAvailableExceeds = 2*obj.sampling*holdtime + obj.sampling*t; % points in each sweep
+                    obj.DAQ.listeners.IVsweep = addlistener(obj.DAQ.s, 'DataAvailable', ...
+                        @(~,event) obj.plotIV(event, holdtime, 2*holdtime+t, obj.file.fid));
+                    cla(obj.axes(1));
+                    obj.axes(1).YLim = [-2*max(V), 2*max(V)];
+                    obj.axes(2).YLim = [-2*max(V), 2*max(V)];
+                    obj.axes(1).XLim = [0, 2*holdtime+t];
+                    cla(obj.axes(2));
+
+                    % start DAQ session
+                    obj.DAQ.ao.startBackground;
+                    obj.DAQ.s.startBackground;
+
+                    % wait until done and then kill it
+                    pause(numel(V)*(2*holdtime+t)); % THIS IS BAD... NEED EVENT
+                    set(button,'Value',0);
+                    obj.stopIV(button);
                 end
-                
-                % make sure not to write over an existing file
-                c = clock; % update date prefix
-                prefix = [num2str(c(1)) '_' sprintf('%02d',c(2)) '_' sprintf('%02d',c(3))];
-                % if there is a file with the same name in this folder
-                num = obj.file.num;
-                while ~isempty(ls([obj.file.folder prefix '_' sprintf('%04d',num) '*']))
-                    num = num + 1; % increment the file number for the next file
-                end
-                % update the handle info
-                obj.file.name = [obj.file.folder prefix '_' sprintf('%04d',num) '_IV' obj.file.suffix];
-                obj.file.prefix = prefix;
-                obj.file.num = num;
-                % get new file ready and open
-                obj.file.fid = fopen(obj.file.name,'w');
-                display('Saving data to');
-                display(obj.file.name);
-                
-                % how to plot
-                obj.DAQ.s.NotifyWhenDataAvailableExceeds = 2*obj.sampling*holdtime + obj.sampling*t; % points in each sweep
-                obj.DAQ.listeners.IVsweep = addlistener(obj.DAQ.s, 'DataAvailable', ...
-                    @(~,event) obj.plotIV(event, holdtime, 2*holdtime+t, obj.file.fid));
-                cla(obj.axes(1));
-                obj.axes(1).YLim = [-Inf, Inf];
-                obj.axes(1).XLim = [0, 2*holdtime+t];
-                cla(obj.axes(2));
-                
-                % start DAQ session
-                obj.DAQ.ao.startBackground;
-                obj.DAQ.s.startBackground;
-                
-                % wait until done and then kill it
-                pause(numel(V)*(2*holdtime+t)); % THIS IS BAD... NEED EVENT
-                obj.stopIV(button);
             catch ex
                 
             end
@@ -942,10 +963,17 @@ classdef DataAcquisition < handle
             
             % plot the data
             plot(obj.axes(1), linspace(0,sweeptime,size(evt.Data,1)), evt.Data(:,1), 'Color', 'k');
-            obj.axes(1).YLim = [-Inf, Inf];
-            voltage = mean(evt.Data((obj.sampling*holdtime):(end-obj.sampling*holdtime),2)*obj.alpha(2))*1000; % mV
-            current = mean(evt.Data((obj.sampling*holdtime):(end-obj.sampling*holdtime),1)*obj.alpha(1));
+            inds = round(obj.sampling*(holdtime+(sweeptime-holdtime)/5):(sweeptime-holdtime+(sweeptime-holdtime)/5));
+            voltage = mean(evt.Data(inds,2)*obj.alpha(2))*1000; % mV
+            current = mean(evt.Data(inds,1)*obj.alpha(1));
             plot(obj.axes(2), voltage, current, 'ok');
+        end
+        
+        function tester(obj, v, length)
+            display('here')
+            queueOutputData(obj.DAQ.ao,[zeros(1,round(length/2)), ...
+                    v*ones(1,length), ...
+                    zeros(1,round(length/2))]'*obj.outputAlpha);
         end
         
         function startSealTest(obj, button)
@@ -953,7 +981,7 @@ classdef DataAcquisition < handle
             % Apply a 5mV square wave
             % Measure current
             % Display as would an oscilloscope on a trigger
-            v = 0.005; % 5mV
+            v = 0.01; % 5mV
             length = 4; % number of points at 100Hz, so 4 pts is 40ms
             try
                 set(button,'CData',imread('Pause.png'));
@@ -962,25 +990,19 @@ classdef DataAcquisition < handle
                 set(button,'String','Stop');
             end
             try
-                % program the output voltages
-                % somehow do indefinitely
-                    queueOutputData(obj.DAQ.ao,[zeros(1,round(length/2)), ...
-                        v*ones(1,length), ...
-                        zeros(1,round(length/2))]'*obj.outputAlpha);
-                end
+                % program the output voltages to go on indefinitely
+                queueOutputData(obj.DAQ.ao,zeros(100,1));
+%                 obj.DAQ.listeners.sealtestV = addlistener(obj.DAQ.ao, ...
+%                     'DataRequired', @(~,~) obj.tester(v,length));
                 
                 % how to plot
                 obj.DAQ.s.NotifyWhenDataAvailableExceeds = 2*obj.sampling*length/100; % points in each sweep
                 obj.DAQ.listeners.sealtest = addlistener(obj.DAQ.s, 'DataAvailable', ...
-                    @(~,event) obj.plotSealTest(event, holdtime, 2*length/100));
-                cla(obj.axes(1));
-                obj.axes(1).YLim = [-Inf, Inf];
-                obj.axes(1).XLim = [0, 2*length/100];
-                cla(obj.axes(2));
+                    @(~,event) obj.plotSealTest(event, 2*length/100));
                 
                 % start DAQ session
-                obj.DAQ.s.startBackground;
                 obj.DAQ.ao.startBackground;
+                obj.DAQ.s.startBackground;
             catch ex
                 
             end
@@ -998,9 +1020,27 @@ classdef DataAcquisition < handle
                 obj.DAQ.s.stop;
                 obj.DAQ.ao.stop;
                 delete(obj.DAQ.listeners.sealtest);
+                delete(obj.DAQ.listeners.sealtestV);
             catch ex
                 
             end
+        end
+        
+        function plotSealTest(obj, evt, duration)
+            % Plot data from the seal test function
+            vmax = max(evt.Data(:,2));
+            %display(vmax)
+            offset =1;% find(evt.Data(:,2)>vmax/3,1,'first');
+            %display(offset)
+            starttime = (size(evt.Data,1)/4 - offset + 1)*1/obj.sampling;
+            x = linspace(starttime,starttime+duration,size(evt.Data,1));
+            %display([min(x) max(x)])
+            xlim([0 0.08])
+            cla(obj.axes);
+            plot(obj.axes,x,evt.Data(:,2)*obj.alpha(1))
+%             obj.fig_cache.update_cache([x, evt.Data(:,1)]); % just current, time-shifted
+%             obj.fig_cache.update_cache([evt.TimeStamps, evt.Data]);
+%             obj.fig_cache.draw_fig_now();
         end
         
         function stopAll(obj)
