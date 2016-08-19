@@ -35,6 +35,7 @@ classdef DataAcquisition < handle
         tbuts       % Handles for the main control buttons
         ybuts       % Handles for the y axis buttons
         xbuts       % Handles for the x axis buttons
+        outputFreq  % Frequency of analog output signal
     end
 
     methods (Hidden=true)
@@ -48,6 +49,7 @@ classdef DataAcquisition < handle
             obj.alpha = inputs.Alphas;
             obj.sampling = inputs.SampleFrequency;
             obj.outputAlpha = inputs.OutputAlpha;
+            obj.outputFreq = 100;
             
             % Initialize DAQ
             function startDAQ(~,~)
@@ -58,8 +60,7 @@ classdef DataAcquisition < handle
                     
                     obj.DAQ.ao = daq.createSession('ni');
                     addAnalogOutputChannel(obj.DAQ.ao, 'Dev1', 'ao0', 'Voltage');
-                    obj.DAQ.ao.Rate = 100;
-                    %queueOutputData(obj.DAQ.ao, zeros(100,1));
+                    obj.DAQ.ao.Rate = obj.outputFreq;
                     
                     obj.DAQ.s.IsContinuous = true;
                     obj.DAQ.ao.IsContinuous = true;
@@ -539,8 +540,8 @@ classdef DataAcquisition < handle
             obj.sealtestSizing;
             obj.sealtestResizeFcn;
 
-            % initialize figure cache
-            obj.fig_cache = [];%figure_cache(obj.axes, obj.alpha(1), 0.08);
+            % no figure cache
+            obj.fig_cache = [];
 
             % Show figure
             obj.fig.Visible = 'on';
@@ -596,7 +597,6 @@ classdef DataAcquisition < handle
             
             function reset_fig
                 obj.axes.YLim = [-0.1, 0.1];
-                obj.axes.XLim = [0, 2/60];
             end
 
             % top
@@ -888,9 +888,9 @@ classdef DataAcquisition < handle
 
                     % program the output voltages
                     for i = 1:numel(V)
-                        queueOutputData(obj.DAQ.ao,[zeros(1,100*holdtime), ...
-                            V(i)*ones(1,100*t), ...
-                            zeros(1,100*holdtime)]'*obj.outputAlpha);
+                        queueOutputData(obj.DAQ.ao,[zeros(1,obj.outputFreq*holdtime), ...
+                            V(i)*ones(1,obj.outputFreq*t), ...
+                            zeros(1,obj.outputFreq*holdtime)]'*obj.outputAlpha);
                     end
 
                     % make sure not to write over an existing file
@@ -963,17 +963,11 @@ classdef DataAcquisition < handle
             
             % plot the data
             plot(obj.axes(1), linspace(0,sweeptime,size(evt.Data,1)), evt.Data(:,1), 'Color', 'k');
-            inds = round(obj.sampling*(holdtime+(sweeptime-holdtime)/5):(sweeptime-holdtime+(sweeptime-holdtime)/5));
-            voltage = mean(evt.Data(inds,2)*obj.alpha(2))*1000; % mV
+            measuretime = sweeptime-2*holdtime;
+            inds = round(((holdtime+measuretime/5):(holdtime+4*measuretime/5))*obj.sampling);
+            voltage = mean(evt.Data(inds,2)*obj.alpha(2)); % mV
             current = mean(evt.Data(inds,1)*obj.alpha(1));
             plot(obj.axes(2), voltage, current, 'ok');
-        end
-        
-        function tester(obj, v, length)
-            display('here')
-            queueOutputData(obj.DAQ.ao,[zeros(1,round(length/2)), ...
-                    v*ones(1,length), ...
-                    zeros(1,round(length/2))]'*obj.outputAlpha);
         end
         
         function startSealTest(obj, button)
@@ -981,8 +975,11 @@ classdef DataAcquisition < handle
             % Apply a 5mV square wave
             % Measure current
             % Display as would an oscilloscope on a trigger
-            v = 0.01; % 5mV
-            length = 4; % number of points at 100Hz, so 4 pts is 40ms
+            v = 0.005; % 5mV
+            ontime = 0.01; % time of pulse, sec
+            rest = 0.1; % time of rest, sec
+            onpts = round(ontime*obj.outputFreq);
+            offpts = rest*obj.outputFreq;
             try
                 set(button,'CData',imread('Pause.png'));
                 set(button,'String','');
@@ -991,20 +988,25 @@ classdef DataAcquisition < handle
             end
             try
                 % program the output voltages to go on indefinitely
-                queueOutputData(obj.DAQ.ao,zeros(100,1));
-%                 obj.DAQ.listeners.sealtestV = addlistener(obj.DAQ.ao, ...
-%                     'DataRequired', @(~,~) obj.tester(v,length));
+                sig = [zeros(1,round(offpts/2)), ...
+                    v*ones(1,onpts), ...
+                    zeros(1,round(offpts/2))]'*obj.outputAlpha;
+                queueOutputData(obj.DAQ.ao,repmat(sig,100,1));
+                obj.DAQ.listeners.sealtestV = addlistener(obj.DAQ.ao, ...
+                    'DataRequired', @(~,~) queueOutputData(obj.DAQ.ao,repmat(sig,100,1)));
                 
                 % how to plot
-                obj.DAQ.s.NotifyWhenDataAvailableExceeds = 2*obj.sampling*length/100; % points in each sweep
+                obj.DAQ.s.NotifyWhenDataAvailableExceeds = obj.sampling/100*(onpts+offpts); % points in each sweep
                 obj.DAQ.listeners.sealtest = addlistener(obj.DAQ.s, 'DataAvailable', ...
-                    @(~,event) obj.plotSealTest(event, 2*length/100));
+                    @(~,event) obj.plotSealTest(event, (onpts+offpts)/100));
+                plot(obj.axes,linspace(-onpts/100,2*onpts/100,100),zeros(1,100))
+                obj.axes.XLim = [-onpts 2*onpts]/100;
                 
                 % start DAQ session
                 obj.DAQ.ao.startBackground;
                 obj.DAQ.s.startBackground;
             catch ex
-                
+                display('Seal test issue')
             end
         end
         
@@ -1028,19 +1030,23 @@ classdef DataAcquisition < handle
         
         function plotSealTest(obj, evt, duration)
             % Plot data from the seal test function
-            vmax = max(evt.Data(:,2));
-            %display(vmax)
-            offset =1;% find(evt.Data(:,2)>vmax/3,1,'first');
-            %display(offset)
-            starttime = (size(evt.Data,1)/4 - offset + 1)*1/obj.sampling;
-            x = linspace(starttime,starttime+duration,size(evt.Data,1));
-            %display([min(x) max(x)])
-            xlim([0 0.08])
-            cla(obj.axes);
-            plot(obj.axes,x,evt.Data(:,2)*obj.alpha(1))
-%             obj.fig_cache.update_cache([x, evt.Data(:,1)]); % just current, time-shifted
-%             obj.fig_cache.update_cache([evt.TimeStamps, evt.Data]);
-%             obj.fig_cache.draw_fig_now();
+            try
+                vmax = max(evt.Data(:,2));
+                voffpt = find(evt.Data(:,2)<vmax/3,1,'first');
+                offset = find(evt.Data(voffpt:end,2)>vmax/2,1,'first');
+                starttime = -offset/obj.sampling;
+                if ~isempty(starttime)
+                    x = linspace(starttime,starttime+duration,size(evt.Data,1));
+                    set(obj.axes.Children,'XData',x,'YData',evt.Data(:,1)); % advanced play
+                end
+            catch ex
+                display('Difficulty plotting seal test data')
+            end
+            try
+                soundsc(evt.Data(:,2),obj.sampling);
+            catch ex
+                display('Could not play sound')
+            end
         end
         
         function stopAll(obj)
