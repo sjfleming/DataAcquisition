@@ -36,6 +36,7 @@ classdef DataAcquisition < handle
         ybuts       % Handles for the y axis buttons
         xbuts       % Handles for the x axis buttons
         outputFreq  % Frequency of analog output signal
+        audio       % Matlab audio player object
     end
 
     methods (Hidden=true)
@@ -49,7 +50,10 @@ classdef DataAcquisition < handle
             obj.alpha = inputs.Alphas;
             obj.sampling = inputs.SampleFrequency;
             obj.outputAlpha = inputs.OutputAlpha;
+            
+            % Set constants
             obj.outputFreq = 100;
+            obj.audio = audioplayer(0,obj.sampling);
             
             % Initialize DAQ
             function startDAQ(~,~)
@@ -67,7 +71,6 @@ classdef DataAcquisition < handle
                     display('DAQ successfully initialized.')
                 catch ex
                     display('Problem initializing DAQ!')
-                    disp(daq.getDevices);
                 end
             end
             startDAQ;
@@ -107,6 +110,8 @@ classdef DataAcquisition < handle
                 try
                     stop(obj.DAQ.s);
                     stop(obj.DAQ.ao);
+                    release(obj.DAQ.s);
+                    release(obj.DAQ.ao);
                     delete(obj.DAQ);
                 catch ex
                     
@@ -1042,8 +1047,18 @@ classdef DataAcquisition < handle
             catch ex
                 display('Difficulty plotting seal test data')
             end
+            % Play sound
             try
-                soundsc(evt.Data(:,2),obj.sampling);
+                if strcmp(obj.audio.Running,'off')
+                    t = 0:1e-3:1*duration;
+                    f = exp(abs(mean(evt.Data(:,1)))*1000);
+                    if f>20
+                        f = 100;
+                    end
+                    y = square(2*pi*f*t,50)+randn(size(t))/10;
+                    obj.audio = audioplayer(y,1000);
+                    play(obj.audio);
+                end
             catch ex
                 display('Could not play sound')
             end
