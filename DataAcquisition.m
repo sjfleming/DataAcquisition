@@ -67,7 +67,7 @@ classdef DataAcquisition < handle
                     obj.DAQ.ao.Rate = obj.outputFreq;
                     
                     obj.DAQ.s.IsContinuous = true;
-                    obj.DAQ.ao.IsContinuous = true;
+                    obj.DAQ.ao.IsContinuous = false;
                     display('DAQ successfully initialized.')
                 catch ex
                     display('Problem initializing DAQ!')
@@ -131,7 +131,7 @@ classdef DataAcquisition < handle
             obj.DEFS.BIGBUTTONSIZE  = 35;
             obj.DEFS.BUTTONSIZE     = 20;
             obj.DEFS.PADDING        = 2;
-            obj.DEFS.LABELWIDTH     = 55;
+            obj.DEFS.LABELWIDTH     = 65;
             
             % start making GUI objects
             obj.fig = figure('Name','DataAcquisition','MenuBar','none',...
@@ -154,7 +154,8 @@ classdef DataAcquisition < handle
             uimenu(f,'Label','Quit','Callback',@closeProg);
             hm = uimenu('Label','Help');
             uimenu(hm,'Label','DataAcquisition','Callback',@(~,~) doc('DataAcquisition.m'));
-            uimenu(hm,'Label','About','Callback',@(~,~) msgbox({'DataAcquisition v1.0 - written by Stephen Fleming, 2016.' '' ...
+            uimenu(hm,'Label','About','Callback',@(~,~) msgbox({'DataAcquisition v1.0 - written by Stephen Fleming.' '' ...
+                'Created for Harvard''s 2016 Freshaman Seminar course 25o.' '' ...
                 'This program and its author are not affiliated with National Instruments, Matlab, or Molecular Devices.' ''},'About DataAcquisition'));
             
             obj.mode = 'normal';
@@ -310,7 +311,7 @@ classdef DataAcquisition < handle
             obj.axes.YLabel.Color = 'k';
             obj.axes.XLabel.String = 'Frequency (Hz)';
             obj.axes.XLabel.Color = 'k';
-            obj.axes.YLim = [1e-12, 1e-4];
+            obj.axes.YLim = [1e-14, 1e-7];
             obj.axes.XLim = [1 3e4];
 
             % now make the buttons
@@ -345,7 +346,7 @@ classdef DataAcquisition < handle
             end
             
             function reset_fig
-                obj.axes.YLim = [1e-12, 1e-4];
+                obj.axes.YLim = [1e-14, 1e-7];
                 obj.axes.XLim = [1 3e4];
             end
 
@@ -427,8 +428,8 @@ classdef DataAcquisition < handle
             obj.axes(1).YLabel.Color = 'k';
             obj.axes(1).XLabel.String = 'Time (s)';
             obj.axes(1).XLabel.Color = 'k';
-            obj.axes(1).YLim = [-1, 1];
-            obj.axes(1).XLim = [0 2];
+            obj.axes(1).YLim = [-0.5, 0.5];
+            obj.axes(1).XLim = [0 0.5];
             
             obj.axes(2) = axes('Parent',obj.panel,'Position',[0.55 0.05 0.45 0.90],...
                 'GridLineStyle','-','XColor', 0.15*[1 1 1],'YColor', 0.15*[1 1 1]);
@@ -562,11 +563,11 @@ classdef DataAcquisition < handle
                 'GridLineStyle','-','XColor', 0.15*[1 1 1],'YColor', 0.15*[1 1 1]);
             set(obj.axes,'NextPlot','replacechildren','XLimMode','manual');
             set(obj.axes,'XGrid','on','YGrid','on','Tag','Axes','Box','on');
-            obj.axes.YLabel.String = 'Current (nA)';
+            obj.axes.YLabel.String = 'Current (pA)';
             obj.axes.YLabel.Color = 'k';
             obj.axes.XLabel.String = 'Time (s)';
             obj.axes.XLabel.Color = 'k';
-            obj.axes.YLim = [-0.1, 0.1];
+            obj.axes.YLim = [-100, 100];
             obj.axes.XLim = [0, 2/60];
 
             % now make the buttons
@@ -601,7 +602,7 @@ classdef DataAcquisition < handle
             end
             
             function reset_fig
-                obj.axes.YLim = [-0.1, 0.1];
+                obj.axes.YLim = [100, 100];
             end
 
             % top
@@ -852,7 +853,7 @@ classdef DataAcquisition < handle
             % Calculate the noise power spectral density, and plot it
             % calculation
             fftsize = min(size(evt.Data,1),2^16);
-            dfft = obj.sampling*abs(fft(obj.alpha(1)*evt.Data(:,1))).^2/fftsize; % fft!
+            dfft = 1/obj.sampling*abs(fft(obj.alpha(1)/1000*evt.Data(:,1))).^2/fftsize; % fft!
             dfft = dfft(1:fftsize/2+1);
             dfft = 2*dfft;
             f = obj.sampling*(0:fftsize/2)/fftsize; % frequency range
@@ -875,13 +876,14 @@ classdef DataAcquisition < handle
             end
             try
                 % get the desired sweep from user
+                obj.DAQ.ao.IsContinuous = true;
                 holdtime = 0.1; % in seconds, hold at 0mV before and after
                 prompt = {'Starting voltage (mV):', ...
                     'Step by (mV):', ...
                     'Ending voltage (mV)', ...
                     'Duration of each voltage (ms):'};
                 dlg_title = 'IV curve setup';
-                defaultans = {'-200','10','200','200'};
+                defaultans = {'180','-10','-180','400'};
                 answer = inputdlg(prompt,dlg_title,1,defaultans);
                 if isempty(answer) % user pressed 'cancel'
                     obj.stopIV(button);
@@ -892,11 +894,15 @@ classdef DataAcquisition < handle
                     t = answer(4)*0.001; % time in seconds
 
                     % program the output voltages
-                    for i = 1:numel(V)
+                    for i = 1:numel(V)-1
                         queueOutputData(obj.DAQ.ao,[zeros(1,obj.outputFreq*holdtime), ...
                             V(i)*ones(1,obj.outputFreq*t), ...
                             zeros(1,obj.outputFreq*holdtime)]'*obj.outputAlpha);
                     end
+                    % there must be a bit extra to trigger last sweep
+                    queueOutputData(obj.DAQ.ao,[zeros(1,obj.outputFreq*holdtime), ...
+                            V(end)*ones(1,obj.outputFreq*t), ...
+                            zeros(1,obj.outputFreq*holdtime+5)]'*obj.outputAlpha);
 
                     % make sure not to write over an existing file
                     c = clock; % update date prefix
@@ -930,7 +936,7 @@ classdef DataAcquisition < handle
                     obj.DAQ.s.startBackground;
 
                     % wait until done and then kill it
-                    pause(numel(V)*(2*holdtime+t)); % THIS IS BAD... NEED EVENT
+                    pause(numel(V)*(2*holdtime+t+0.01)); % THIS IS BAD... NEED EVENT
                     set(button,'Value',0);
                     obj.stopIV(button);
                 end
@@ -951,6 +957,7 @@ classdef DataAcquisition < handle
                 fclose(obj.file.fid);
                 obj.DAQ.s.stop;
                 obj.DAQ.ao.stop;
+                obj.DAQ.ao.IsContinuous = false;
                 delete(obj.DAQ.listeners.IVsweep);
             catch ex
                 
@@ -963,15 +970,15 @@ classdef DataAcquisition < handle
             % plots a mean data point on axis 2
             
             % save the data to a file
-            data = [evt.TimeStamps, repmat(obj.alpha,size(evt.Data,1),1) .* evt.Data];
+            data = [evt.TimeStamps'; (repmat(obj.alpha,size(evt.Data,1),1) .* evt.Data)'];
             fwrite(fid,data,'double');
             
             % plot the data
-            plot(obj.axes(1), linspace(0,sweeptime,size(evt.Data,1)), evt.Data(:,1), 'Color', 'k');
+            plot(obj.axes(1), linspace(0,sweeptime,size(evt.Data,1)), evt.Data(:,1)*obj.alpha(1)/1000, 'Color', 'k');
             measuretime = sweeptime-2*holdtime;
             inds = round(((holdtime+measuretime/5):(holdtime+4*measuretime/5))*obj.sampling);
             voltage = mean(evt.Data(inds,2)*obj.alpha(2)); % mV
-            current = mean(evt.Data(inds,1)*obj.alpha(1));
+            current = mean(evt.Data(inds,1)*obj.alpha(1)/1000);
             plot(obj.axes(2), voltage, current, 'ok');
         end
         
@@ -980,6 +987,7 @@ classdef DataAcquisition < handle
             % Apply a 5mV square wave
             % Measure current
             % Display as would an oscilloscope on a trigger
+            obj.DAQ.ao.IsContinuous = true;
             v = 0.005; % 5mV
             ontime = 0.01; % time of pulse, sec
             rest = 0.1; % time of rest, sec
@@ -1026,6 +1034,7 @@ classdef DataAcquisition < handle
             try
                 obj.DAQ.s.stop;
                 obj.DAQ.ao.stop;
+                obj.DAQ.ao.IsContinuous = false;
                 delete(obj.DAQ.listeners.sealtest);
                 delete(obj.DAQ.listeners.sealtestV);
             catch ex
@@ -1036,32 +1045,32 @@ classdef DataAcquisition < handle
         function plotSealTest(obj, evt, duration)
             % Plot data from the seal test function
             try
-                vmax = max(evt.Data(:,2));
-                voffpt = find(evt.Data(:,2)<vmax/3,1,'first');
-                offset = find(evt.Data(voffpt:end,2)>vmax/2,1,'first');
+                vmax = max(evt.Data(:,2)*obj.alpha(2));
+                voffpt = find(evt.Data(:,2)*obj.alpha(2)<vmax/3,1,'first');
+                offset = find(evt.Data(voffpt:end,2)*obj.alpha(2)>vmax/2,1,'first');
                 starttime = -offset/obj.sampling;
                 if ~isempty(starttime)
                     x = linspace(starttime,starttime+duration,size(evt.Data,1));
-                    set(obj.axes.Children,'XData',x,'YData',evt.Data(:,1)); % advanced play
+                    set(obj.axes.Children,'XData',x,'YData',evt.Data(:,1)*obj.alpha(1)); % advanced play
                 end
             catch ex
                 display('Difficulty plotting seal test data')
             end
             % Play sound
-            try
-                if strcmp(obj.audio.Running,'off')
-                    t = 0:1e-3:1*duration;
-                    f = exp(abs(mean(evt.Data(:,1)))*1000);
-                    if f>20
-                        f = 100;
-                    end
-                    y = square(2*pi*f*t,50)+randn(size(t))/10;
-                    obj.audio = audioplayer(y,1000);
-                    play(obj.audio);
-                end
-            catch ex
-                display('Could not play sound')
-            end
+%             try
+%                 if strcmp(obj.audio.Running,'off')
+%                     t = 0:1e-3:1*duration;
+%                     f = exp(abs(mean(evt.Data(:,1)))*1000);
+%                     if f>20
+%                         f = 100;
+%                     end
+%                     y = square(2*pi*f*t,50)+randn(size(t))/10;
+%                     obj.audio = audioplayer(y,1000);
+%                     play(obj.audio);
+%                 end
+%             catch ex
+%                 display('Could not play sound')
+%             end
         end
         
         function stopAll(obj)
@@ -1107,7 +1116,7 @@ classdef DataAcquisition < handle
                 varargin = varargin{:};
 
                 % defaults and checks
-                defaultSampleFreq = 30000;
+                defaultSampleFreq = 25000;
                 checkSampleFreq = @(x) all([isnumeric(x), numel(x)==1, x>=10, x<=50000]);
                 defaultChannels = [0, 1];
                 checkChannels = @(x) all([isnumeric(x), arrayfun(@(y) y>=1, x), ...
