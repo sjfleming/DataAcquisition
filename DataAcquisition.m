@@ -806,7 +806,7 @@ classdef DataAcquisition < handle
         end
         
         function showDataAndRecord(obj, evt, fid)
-            data = [evt.TimeStamps, repmat(obj.alpha,size(evt.Data,1),1) .* evt.Data];
+            data = [evt.TimeStamps'; (repmat(obj.alpha,size(evt.Data,1),1) .* evt.Data)'];
             fwrite(fid,data,'double');
             obj.fig_cache.update_cache([evt.TimeStamps, evt.Data]);
             obj.fig_cache.draw_fig_now();
@@ -1113,7 +1113,7 @@ classdef DataAcquisition < handle
                 checkChannels = @(x) all([isnumeric(x), arrayfun(@(y) y>=1, x), ...
                     arrayfun(@(y) y<=4, x), numel(unique(x))==numel(x), ...
                     numel(x)>0, numel(x)<=4]);
-                defaultAlpha = [1, 1];
+                defaultAlpha = [100, 100];
                 checkAlpha = @(x) all([isnumeric(x), arrayfun(@(y) y>0, x), ...
                     numel(x)>0, numel(x)<=4]);
                 defaultOutputAlpha = 10;

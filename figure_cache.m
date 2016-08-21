@@ -27,6 +27,7 @@ classdef figure_cache < handle
             obj.nsigs = numel(al);
             obj.alpha = al;
             obj.xmax = xm;
+            obj.ymax = 10*al(1);
             obj.xdata = linspace(0,xm,obj.pts)';
             obj.ydata = nan(obj.pts,obj.nsigs);
             ylim([-obj.ymax obj.ymax]);
