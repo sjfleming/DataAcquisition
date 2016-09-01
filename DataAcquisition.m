@@ -37,6 +37,7 @@ classdef DataAcquisition < handle
         xbuts       % Handles for the x axis buttons
         outputFreq  % Frequency of analog output signal
         audio       % Matlab audio player object
+        data_compression_scaling    % compression to int16
     end
 
     methods (Hidden=true)
@@ -50,6 +51,9 @@ classdef DataAcquisition < handle
             obj.alpha = inputs.Alphas;
             obj.sampling = inputs.SampleFrequency;
             obj.outputAlpha = inputs.OutputAlpha;
+            
+            % Figure out scale factor for data compression
+            obj.data_compression_scaling = (2^15-1)./obj.alpha/10; % range of 10V
             
             % Set constants
             obj.outputFreq = 100;
@@ -85,7 +89,7 @@ classdef DataAcquisition < handle
                     obj.file.folder = ['C:\Data\PatchClamp\' num2str(c(1)) sprintf('%02d',c(2)) sprintf('%02d',c(3)) '\'];
                 end
                 obj.file.prefix = [num2str(c(1)) '_' sprintf('%02d',c(2)) '_' sprintf('%02d',c(3))];
-                obj.file.suffix = '.bin';
+                obj.file.suffix = '.dbf';
                 obj.file.num = 0;
                 obj.file.name = [obj.file.folder obj.file.prefix '_' sprintf('%04d',obj.file.num) obj.file.suffix];
                 obj.file.fid = [];
@@ -168,6 +172,7 @@ classdef DataAcquisition < handle
         function normalMode(obj)
             % stop other things that might have been running
             obj.stopAll;
+            obj.mode = 'normal';
             
             % set default positions
             obj.normalSizing;
@@ -284,6 +289,7 @@ classdef DataAcquisition < handle
         function noiseMode(obj)
             % stop other things that might have been running
             obj.stopAll;
+            obj.mode = 'noise';
             
             % set default positions
             obj.noiseSizing;
@@ -402,6 +408,7 @@ classdef DataAcquisition < handle
         function ivMode(obj)
             % stop other things that might have been running
             obj.stopAll;
+            obj.mode = 'iv';
             
             % set default positions
             obj.ivSizing;
@@ -541,6 +548,7 @@ classdef DataAcquisition < handle
         function sealtestMode(obj)
             % stop other things that might have been running
             obj.stopAll;
+            obj.mode = 'sealtest';
             
             % set default positions
             obj.sealtestSizing;
@@ -652,6 +660,21 @@ classdef DataAcquisition < handle
                     obj.DEFS.BIGBUTTONSIZE, ...
                     obj.DEFS.BIGBUTTONSIZE]));
             end
+        end
+        
+        function writeFileHeader(obj, fid)
+            % write a file header
+            h.si = 1/obj.sampling;
+            h.chNames = {'Current (pA)','Voltage (mV)'};
+            h.data_compression_scaling = obj.data_compression_scaling;
+            hh = getByteStreamFromArray(h);
+            n = numel(hh);
+            fwrite(fid,n,'*uint32');
+            fwrite(fid,hh,'*uint8');
+        end
+        
+        function writeFileData(obj, fid, data)
+            fwrite(fid,int16(repmat(obj.data_compression_scaling,size(data,2),1)' .* data),'*int16');
         end
         
         function stateDecision(obj, src)
@@ -771,6 +794,7 @@ classdef DataAcquisition < handle
                 obj.file.num = num;
                 % get new file ready and open
                 fid = fopen(obj.file.name,'w');
+                obj.writeFileHeader(fid);
                 % add listener for data
                 obj.DAQ.listeners.logAndPlot = addlistener(obj.DAQ.s, 'DataAvailable', ...
                     @(~,event) obj.showDataAndRecord(event, fid));
@@ -807,8 +831,8 @@ classdef DataAcquisition < handle
         end
         
         function showDataAndRecord(obj, evt, fid)
-            data = [evt.TimeStamps'; (repmat(obj.alpha,size(evt.Data,1),1) .* evt.Data)'];
-            fwrite(fid,data,'double');
+            data = (repmat(obj.alpha,size(evt.Data,1),1) .* evt.Data)';
+            obj.writeFileData(fid, data);
             obj.fig_cache.update_cache([evt.TimeStamps, evt.Data]);
             obj.fig_cache.draw_fig_now();
         end
@@ -918,6 +942,7 @@ classdef DataAcquisition < handle
                     obj.file.num = num;
                     % get new file ready and open
                     obj.file.fid = fopen(obj.file.name,'w');
+                    obj.writeFileHeader(obj.file.fid);
                     display('Saving data to');
                     display(obj.file.name);
 
@@ -970,8 +995,8 @@ classdef DataAcquisition < handle
             % plots a mean data point on axis 2
             
             % save the data to a file
-            data = [evt.TimeStamps'; (repmat(obj.alpha,size(evt.Data,1),1) .* evt.Data)'];
-            fwrite(fid,data,'double');
+            data = (repmat(obj.alpha,size(evt.Data,1),1) .* evt.Data)';
+            obj.writeFileData(fid, data);
             
             % plot the data
             plot(obj.axes(1), linspace(0,sweeptime,size(evt.Data,1)), evt.Data(:,1)*obj.alpha(1)/1000, 'Color', 'k');
