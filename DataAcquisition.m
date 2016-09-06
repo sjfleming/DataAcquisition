@@ -1,16 +1,39 @@
 classdef DataAcquisition < handle
 % DATAACQUISITION is a Matlab program for electronic signal acquistion from
-% an NI-DAQ USB 6003.
+% a National Instruments DAQ USB-6003.
 
 % This software was written with Patch Clamp and electrophysiological
 % measurements in mind, although it could also be used as a simple
 % oscilloscope and data recording tool.
+%
 % DataAcquisition has the following modes of operation:
 % "Normal Acquisition":
-%   
+%   An oscilloscope mode, enabling live data viewing as well as "gap-free" 
+%   recording.
+% "Noise Plot":
+%   A live noise plot is displayed on the screen and is periodically
+%   refreshed, allowing the user to identify noise sources, make changes in
+%   an experiment, and see their effects in real time.
+% "IV Acquisition":
+%   Programmable, periodic voltage stimulation allows the user to make a
+%   recording of current versus voltage.  This feature displays the results
+%   on screen in a second panel.
+% "Seal Test":
+%   A mode used for examining capacitance.  Reapeatedly
+%   applies a voltage step function and displays the resulting current
+%   response.  This mode is useful in patch clamp experiments, where the
+%   user can adjust capacitance compensation to offset the current spikes
+%   which accompany the voltage steps.
+%
 % Use of the functionality specific to electrophysiology measurements (IV
 % curve and membrane seal test) require the analog output terminal ao0 to
 % be connected to an external command input on the current amplifier.
+%
+% Data is saved in a .dbf file format in the folder specified by the user.
+% The .dbf file format, for "Dataacquisition Binary Format," is a binary
+% file which contains a header followed by the signal data, and can be
+% opened using Tamas Szalay's PoreView software, with the appropriate
+% additions for .dbf handling.
 
 % Stephen Fleming 2016.08.13
 

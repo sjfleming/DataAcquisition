@@ -1,6 +1,10 @@
 classdef figure_cache < handle
     % A figure_cache is an object which stores the information to be
     % displayed in a figure that is constantly being updated.
+    % Data is automatically downsampled to display correctly on screen, so
+    % that even extremely large datasets can be visualized easily.
+    % Figure_cache is used by DataAcquisition to display live data from a
+    % National Instruments USB-6003 DAQ.
     % Stephen Fleming 2016/06/08
     
     properties
@@ -204,4 +208,3 @@ classdef figure_cache < handle
     end
     
 end
-        
