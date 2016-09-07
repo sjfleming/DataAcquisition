@@ -106,9 +106,11 @@ classdef DataAcquisition < handle
             function setFileLocation(~,~)
                 c = clock;
                 % get the folder location from the user
-                obj.file.folder = [uigetdir(['C:\Data\PatchClamp\' num2str(c(1)) sprintf('%02d',c(2)) sprintf('%02d',c(3))]) '\'];
+                obj.file.folder = [uigetdir(['C:\Data\PatchClamp\' num2str(c(1)) ...
+                    sprintf('%02d',c(2)) sprintf('%02d',c(3))], ...
+                    'Select save location') '\'];
                 % if unable to get input from user
-                if isempty(obj.file.folder)
+                if any([isempty(obj.file.folder), obj.file.folder == 0])
                     obj.file.folder = ['C:\Data\PatchClamp\' num2str(c(1)) sprintf('%02d',c(2)) sprintf('%02d',c(3)) '\'];
                 end
                 obj.file.prefix = [num2str(c(1)) '_' sprintf('%02d',c(2)) '_' sprintf('%02d',c(3))];
