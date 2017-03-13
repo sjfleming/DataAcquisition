@@ -1169,8 +1169,8 @@ classdef DataAcquisition < handle
                 defaultSampleFreq = 25000;
                 checkSampleFreq = @(x) all([isnumeric(x), numel(x)==1, x>=10, x<=50000]);
                 defaultChannels = [0, 1];
-                checkChannels = @(x) all([isnumeric(x), arrayfun(@(y) y>=1, x), ...
-                    arrayfun(@(y) y<=4, x), numel(unique(x))==numel(x), ...
+                checkChannels = @(x) all([isnumeric(x), arrayfun(@(y) y>=0, x), ...
+                    arrayfun(@(y) y<=3, x), numel(unique(x))==numel(x), ...
                     numel(x)>0, numel(x)<=4]);
                 defaultAlpha = [100, 100];
                 checkAlpha = @(x) all([isnumeric(x), arrayfun(@(y) y>0, x), ...
@@ -1178,30 +1178,21 @@ classdef DataAcquisition < handle
                 defaultOutputAlpha = 10;
                 checkOutputAlpha = @(x) all([isnumeric(x), numel(x)==1, x>0]);
                 
-                % set up the inputs
-                if any(cellfun(@(x) strcmp(x,'Channels'), varargin))
-                    % if the number of channels is specified
-                    logic = cellfun(@(x) strcmp(x,'Channels'), varargin);
+                % if channels are specified, make sure alphas and sample
+                % frequencies have the right number of elements
+                logic = cellfun(@(x) strcmp(x,'Channels'), varargin);
+                if sum(logic)>0
                     ind = find(logic,1,'first'); % which index is the input 'Channels'
                     chan = varargin{ind+1}; % vector of channels
                     checkAlpha = @(x) all([isnumeric(x), arrayfun(@(y) y>0, x), numel(x)==numel(chan)]);
-                    % you are required to specify each alpha (channel conversion factor)
-                    addRequired(p,'Alphas',defaultAlpha,checkAlpha);
-                    % also redefine the sample frequency check
                     checkSampleFreq = @(x) all([isnumeric(x),x>=10,x<=floor(100000/numel(chan))]);
-                else
-                    % assume number of channels equal to numel(alpha)
-                    logic = cellfun(@(x) strcmp(x,'Alphas'), varargin);
-                    if sum(logic)>0
-                        ind = find(logic,1,'first'); % which index is the input 'Channels'
-                        alphas = varargin{ind+1}; % vector of alphas
-                        defaultChannels = 0:1:numel(alphas);
-                    end
-                    addOptional(p,'Alphas',defaultAlpha,checkAlpha);
                 end
+                
+                % set up the inputs
                 addOptional(p,'SampleFrequency',defaultSampleFreq,checkSampleFreq);
                 addOptional(p,'Channels',defaultChannels,checkChannels);
                 addOptional(p,'OutputAlpha',defaultOutputAlpha,checkOutputAlpha);
+                addOptional(p,'Alphas',defaultAlpha,checkAlpha);
                 
                 % parse
                 parse(p,varargin{:});
