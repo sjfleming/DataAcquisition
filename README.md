@@ -16,16 +16,16 @@ d = DataAcquisition();
 
 Optionally, you can input Channels, Alphas, OutputAlpha, and SampleFrequency as a list of name, value pairs:
 
-```Channels``` is a vector (maximum of four elements) containing the integers 0 through 3 that specifies which channels are inputs. 
+```'Channels'``` should be paired with a vector (maximum of four elements) containing the integers 0 through 3 that specifies which channels are inputs. 
 	e.g. [0, 1]
 	Note: specify the scalings for all inputs and outputs if you specify any.
 
-```Alphas``` is a vector of scale factors to apply to analog inputs (to convert measured values to either pA or mV).
+```'Alphas'``` should be paired with a vector of scale factors to apply to analog inputs (to convert measured values to either pA or mV).
 	Note: you must specify the scale factors for all inputs if you specify any.
   
-```OutputAlpha``` is a numeric scale factor to be applied to the analog output (to convert values in mV to voltage output in the range [-10,10] Volts).
+```'OutputAlpha'``` should be paired with a numeric scale factor to be applied to the analog output (to convert values in mV to voltage output in the range [-10,10] Volts).
 
-```SampleFrequency``` is a numeric value that specifies the frequency at which data are sampled.  Default is 25kHz.
+```'SampleFrequency'``` should be paired with a numeric value that specifies the frequency at which data are sampled.  Default is 25kHz.
   Note: due to hardware limitations, the upper limit is 100kHz divided by the number of input channels.
 
 
