@@ -14,7 +14,7 @@ DataAcquisition is an open-source graphical user interface for viewing and recor
 d = DataAcquisition();
 ```
 
-Optionally, you can input Channels, Alphas, OutputAlpha, and SampleFrequency:
+Optionally, you can input Channels, Alphas, OutputAlpha, and SampleFrequency as a list of name, value pairs:
 
 ```Channels``` is a vector (maximum of four elements) containing the integers 0 through 3 that specifies which channels are inputs. 
 	e.g. [0, 1]
