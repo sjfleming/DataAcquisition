@@ -19,7 +19,7 @@ Other software platforms for recording data from a DAQ are usually either expens
 d = DataAcquisition();
 ```
 
-Optionally, you can input Channels, Alphas, OutputAlpha, and SampleFrequency as a list of name, value pairs:
+Optionally, you can input Channels, Alphas, OutputAlpha, and/or SampleFrequency as a list of name, value pairs:
 
 ```'Channels'``` should be paired with a vector (maximum of four elements) containing the integers 0 through 3 that specifies which channels are inputs. 
 	e.g. [0, 1]
@@ -35,6 +35,16 @@ Optionally, you can input Channels, Alphas, OutputAlpha, and SampleFrequency as 
 
 
 ## Example Usage
+
+```matlab
+d = DataAcquisition();
+```
+
+uses default values.  Or you can specify everything:
+
+```matlab
+d = DataAcquisition('Channels',[0,1],'Alphas',[100,100],'OutputAlpha',10,'SampleFrequency',25000);
+```
 
 ... screenshots forthcoming.  It's a GUI.
 
