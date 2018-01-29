@@ -3,9 +3,14 @@ DataAcquisition
 
 ## What
 
-DataAcquisition is an open-source graphical user interface for viewing and recording data from a National Instruments DAQ in real time.  Specifically developed for patch-clamp electrophysiology recordings, DataAcquisition together with the NI DAQ USB-6003 provide an alternative to [Axon's pCLAMP software](https://www.moleculardevices.com/systems/axon-conventional-patch-clamp/pclamp-11-software-suite) together with the [DigiData](https://www.moleculardevices.com/systems/conventional-patch-clamp/digidata-1550-digitizer) analog-to-digital converter.
+DataAcquisition is an open-source graphical user interface for viewing and recording data from a National Instruments DAQ in real time.  The program runs in MATLAB.  Specifically developed for patch-clamp electrophysiology recordings, DataAcquisition together with the [NI DAQ USB-6003](http://www.ni.com/en-us/support/model.usb-6003.html) provides an alternative to [Axon's pCLAMP software](https://www.moleculardevices.com/systems/axon-conventional-patch-clamp/pclamp-11-software-suite) together with the [DigiData](https://www.moleculardevices.com/systems/conventional-patch-clamp/digidata-1550-digitizer) analog-to-digital converter.
 
 ![](http://s7d5.scene7.com/is/image/ni/04231404?$ni-card-md$)
+
+
+## Why
+
+Other software platforms for recording data from a DAQ are usually either expensive or complicated.  This is a minimalist approach with a simple interface for viewing and saving data.  There are a few features tailored to electrophysiology recordings, such as noise plots, current-versus-voltage curves, and capacitive current measurements.  This program was developed for and field tested by Harvard's Fall 2016 Freshman Seminar lab course on nanopore DNA sequencing.
 
 
 ## Usage
@@ -26,13 +31,14 @@ Optionally, you can input Channels, Alphas, OutputAlpha, and SampleFrequency as 
 ```'OutputAlpha'``` should be paired with a numeric scale factor to be applied to the analog output (to convert values in mV to voltage output in the range [-10,10] Volts).
 
 ```'SampleFrequency'``` should be paired with a numeric value that specifies the frequency at which data are sampled.  Default is 25kHz.
-  Note: due to hardware limitations, the upper limit is 100kHz divided by the number of input channels.
+  Note: due to hardware limitations, the upper limit for the NI DAQ USB-6003 is 100kHz divided by the number of input channels.
 
 
 ## Example Usage
 
 ... screenshots forthcoming.  It's a GUI.
 
+
 ## Who
 
-Stephen Fleming, PhD candidate at the Golovchenko Lab in the physics department at Harvard University.
+Stephen Fleming, PhD candidate at the Golovchenko Lab in the physics department at Harvard University, 2016.
