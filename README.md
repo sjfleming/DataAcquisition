@@ -36,14 +36,18 @@ Optionally, you can input Channels, Alphas, OutputAlpha, and/or SampleFrequency 
 
 ## Example Usage
 
+You should have your DAQ plugged into the computer and the relevant National Instruments software installed.  The name of the device should be 'Dev1', which is the default.
+
+To launch DataAcquisition, open MATLAB, navigate to the folder containing DataAcquisition.m, and type the following in the MATLAB command line:
+
 ```matlab
-d = DataAcquisition();
+>> d = DataAcquisition();
 ```
 
-uses default values.  Or you can specify everything:
+The command above uses default values.  Or you can specify everything:
 
 ```matlab
-d = DataAcquisition('Channels',[0,1],'Alphas',[100,100],'OutputAlpha',10,'SampleFrequency',25000);
+>> d = DataAcquisition('Channels',[0,1],'Alphas',[100,100],'OutputAlpha',10,'SampleFrequency',25000);
 ```
 
 ... screenshots forthcoming.  It's a GUI.
