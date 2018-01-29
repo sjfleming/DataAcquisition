@@ -50,6 +50,8 @@ The command above uses default values.  Or you can specify everything:
 >> d = DataAcquisition('Channels',[0,1],'Alphas',[100,100],'OutputAlpha',10,'SampleFrequency',25000);
 ```
 
+Note that these parameters can also be changed using the graphical interface, once it has launched.
+
 ... screenshots forthcoming.  It's a GUI.
 
 
