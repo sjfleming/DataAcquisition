@@ -80,7 +80,7 @@ classdef DataAcquisition < handle
             
             % Set constants
             obj.outputFreq = 100;
-            obj.audio = audioplayer(0,obj.sampling);
+%             obj.audio = audioplayer(0,obj.sampling);
             
             % Initialize DAQ
             function startDAQ(~,~)
@@ -95,9 +95,20 @@ classdef DataAcquisition < handle
                     
                     obj.DAQ.s.IsContinuous = true;
                     obj.DAQ.ao.IsContinuous = false;
-                    display('DAQ successfully initialized.')
+                    
+                    display('DAQ communication established...')
                 catch ex
                     display('Problem initializing DAQ!')
+                end
+                try
+                    % pre-run to warm up and prevent lag later
+                    obj.DAQ.listeners.plot = addlistener(obj.DAQ.s, 'DataAvailable', ...
+                        @(~,~) 0);
+                    obj.DAQ.s.startBackground;
+                    obj.DAQ.s.stop;
+                    display('DAQ successfully initialized.')
+                catch ex
+                    
                 end
             end
             startDAQ;
@@ -123,6 +134,40 @@ classdef DataAcquisition < handle
             
             % Create space for listeners
             obj.DAQ.listeners = [];
+            
+            % Enable the user to change DAQ configuation settings
+            function configure(~,~)
+                % open up a dialog box where users can change the DAQ
+                % configuration
+
+                prompt = {'Channels (array of integers):', ...
+                    'Scaling of inputs (array: measured*scaling = pA or mV):', ...
+                    'Scaling of output (number: output(mV)*scaling = Volts in DAQ''s output range)', ...
+                    'Sampling frequency (number in Hz):'};
+                dlg_title = 'DAQ configuration';
+                defaultans = {['[' num2str(obj.channels) ']'], ...
+                    ['[' num2str(obj.alpha) ']'], ...
+                    num2str(obj.outputAlpha), ...
+                    num2str(obj.sampling)};
+                answer = inputdlg(prompt,dlg_title,1,defaultans);
+                if ~isempty(answer) % user did not press 'cancel'
+                    % construct the argument list of name value pairs
+                    emptyinputs = cellfun(@(x) isempty(x), answer);
+                    names = {'Channels','Alphas','OutputAlpha','SampleFrequency'};
+                    values = cellfun(@(x) str2num(x), answer, 'uniformoutput', false);
+                    listargs = reshape([names(~emptyinputs); values(~emptyinputs)'],1,[]);
+                    
+                    % re-configure the DAQ
+                    inputs = obj.parseInputs(listargs);
+                    obj.channels = inputs.Channels;
+                    obj.alpha = inputs.Alphas;
+                    obj.sampling = inputs.SampleFrequency;
+                    obj.outputAlpha = inputs.OutputAlpha;
+                    
+                    startDAQ;
+                end
+
+            end
             
             % Define what happens on close
             function closeProg(~,~)
@@ -175,12 +220,16 @@ classdef DataAcquisition < handle
             
             % make the menu bar
             f = uimenu('Label','File');
-            uimenu(f,'Label','Choose Save Location','Callback',@setFileLocation);
-            uimenu(f,'Label','Normal acquisition','Callback',@(~,~) obj.normalMode);
-            uimenu(f,'Label','IV curve','Callback',@(~,~) obj.ivMode);
-            uimenu(f,'Label','Noise plot','Callback',@(~,~) obj.noiseMode);
-            uimenu(f,'Label','Membrane seal test','Callback',@(~,~) obj.sealtestMode);
+            uimenu(f,'Label','Choose Save Directory','Callback',@setFileLocation);
+            uimenu(f,'Label','Configure DAQ','Callback',@configure);
             uimenu(f,'Label','Quit','Callback',@closeProg);
+            
+            mm = uimenu('Label','Mode');
+            uimenu(mm,'Label','Normal acquisition','Callback',@(~,~) obj.normalMode);
+            uimenu(mm,'Label','IV curve','Callback',@(~,~) obj.ivMode);
+            uimenu(mm,'Label','Noise plot','Callback',@(~,~) obj.noiseMode);
+            uimenu(mm,'Label','Membrane seal test','Callback',@(~,~) obj.sealtestMode);
+            
             hm = uimenu('Label','Help');
             uimenu(hm,'Label','DataAcquisition','Callback',@(~,~) doc('DataAcquisition.m'));
             uimenu(hm,'Label','About','Callback',@(~,~) msgbox({'DataAcquisition v1.0 - written by Stephen Fleming.' '' ...
