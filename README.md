@@ -50,10 +50,14 @@ The command above uses default values.  Or you can specify everything:
 >> d = DataAcquisition('Channels',[0,1],'Alphas',[100,100],'OutputAlpha',10,'SampleFrequency',25000);
 ```
 
-Note that these parameters can also be changed using the graphical interface, once it has launched.
+Note that these parameters can also be changed using the graphical interface, once it has launched (File > Configure DAQ).
 
 ... screenshots forthcoming.  It's a GUI.
 
+
+## Details of Setup
+
+The ideal experimental setup is to have BNC cables attached to the current amplifier, and then to have BNC splitters attached to those cables, which splits the BNC into signal and ground.  These wires can be plugged into the DAQ separately (e.g. 0+ for current signal, and 0- for current ground), implementing differential sensing mode.  Connect the output of the current amplifier to DAQ channel 0, connect the membrane voltage output of the amplifier to DAQ channel 1, and connect the external command input on the current amplifier to DAQ AO0 (signal) and AO_ground (ground).
 
 ## Who
 
