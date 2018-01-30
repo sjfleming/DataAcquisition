@@ -164,7 +164,10 @@ classdef DataAcquisition < handle
                     obj.sampling = inputs.SampleFrequency;
                     obj.outputAlpha = inputs.OutputAlpha;
                     
+                    % update parameters in DAQ config and in figure cache
                     startDAQ;
+                    obj.mode = 'normal';
+                    obj.normalMode;
                 end
 
             end
@@ -1021,7 +1024,8 @@ classdef DataAcquisition < handle
                     display(obj.file.name);
 
                     % how to plot
-                    obj.DAQ.s.NotifyWhenDataAvailableExceeds = 2*obj.sampling*holdtime + obj.sampling*t; % points in each sweep
+                    nchans = numel(obj.channels);
+                    obj.DAQ.s.NotifyWhenDataAvailableExceeds = nchans*obj.sampling*holdtime + obj.sampling*t; % points in each sweep
                     obj.DAQ.listeners.IVsweep = addlistener(obj.DAQ.s, 'DataAvailable', ...
                         @(~,event) obj.plotIV(event, holdtime, 2*holdtime+t, obj.file.fid));
                     cla(obj.axes(1));
@@ -1070,6 +1074,7 @@ classdef DataAcquisition < handle
             
             % save the data to a file
             data = (repmat(obj.alpha,size(evt.Data,1),1) .* evt.Data)';
+            data = data(1:2,:); % only use the first and second input channel
             obj.writeFileData(fid, data);
             
             % plot the data
