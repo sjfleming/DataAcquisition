@@ -1030,6 +1030,7 @@ classdef DataAcquisition < handle
                         @(~,event) obj.plotIV(event, holdtime, 2*holdtime+t, obj.file.fid));
                     cla(obj.axes(1));
                     obj.axes(1).YLim = [-2*max(V), 2*max(V)];
+                    obj.axes(2).XLim = [min(V)*1000-10, max(V)*1000+10];
                     obj.axes(2).YLim = [-2*max(V), 2*max(V)];
                     obj.axes(1).XLim = [0, 2*holdtime+t];
                     cla(obj.axes(2));
