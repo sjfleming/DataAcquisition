@@ -5,7 +5,7 @@ DataAcquisition
 
 DataAcquisition is an open-source graphical user interface for viewing and recording data from a National Instruments DAQ in real time.  The program runs in MATLAB.  Specifically developed for patch-clamp electrophysiology recordings, DataAcquisition together with the [NI DAQ USB-6003](http://www.ni.com/en-us/support/model.usb-6003.html) provides an alternative to [Axon's pCLAMP software](https://www.moleculardevices.com/systems/axon-conventional-patch-clamp/pclamp-11-software-suite) together with the [DigiData](https://www.moleculardevices.com/systems/conventional-patch-clamp/digidata-1550-digitizer) analog-to-digital converter.
 
-![](http://s7d5.scene7.com/is/image/ni/04231404?$ni-card-md$)
+![Setup](img/setup.png)
 
 
 ## Why
@@ -52,7 +52,37 @@ The command above uses default values.  Or you can specify everything:
 
 Note that these parameters can also be changed using the graphical interface, once it has launched (File > Configure DAQ).
 
-... screenshots forthcoming.  It's a GUI.
+### Normal acquisition mode
+
+View and record current and voltage as a function of time.
+
+![Normal mode](img/norm.png)
+
+### Noise mode
+
+View a plot of the noise power spectral density, updated in real time.
+
+![Noise mode](img/noise.png)
+
+### IV curve mode
+
+Record current at various voltages by applying a set of voltages for specified times.
+On the left, current versus time is plotted at each voltage.
+On the right, current is plotted as a function of voltage.  The linear relationship is characteristic of a resistor.
+
+![Setup](img/iv.png)
+
+### Capacitance compensation mode
+
+Display the current-versus-time response to a square-wave of 5mV, in order to look at the capacitive current spikes.  Capacitive current spikes can be compensated for on most current amplifiers used for electrophysiology by means of a "capacitance compensation" knob.  Using capacitance compensation mode makes this process easy by immediately showing the results of attempts at compensation.
+
+Before compensation (capacitive current spikes visible):
+
+![Setup](img/cap_pre.png)
+
+After compensation (capacitive current spikes gone):
+
+![Setup](img/cap_post.png)
 
 
 ## Details of Setup
