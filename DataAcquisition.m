@@ -826,7 +826,7 @@ classdef DataAcquisition < handle
                 % start DAQ session
                 obj.DAQ.s.startBackground;
             catch ex
-                display('Error.')
+                display('Error obtaining data from DAQ.')
             end
         end
         
