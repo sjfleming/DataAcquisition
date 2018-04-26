@@ -16,7 +16,11 @@ Other software platforms for recording data from a DAQ are usually either expens
 ## Usage
 
 ```matlab
-d = DataAcquisition();
+>> DataAcquisition;
+```
+or
+```
+>> d = DataAcquisition();
 ```
 
 Optionally, you can input Channels, Alphas, OutputAlpha, and/or SampleFrequency as a list of name, value pairs:
@@ -33,6 +37,11 @@ Optionally, you can input Channels, Alphas, OutputAlpha, and/or SampleFrequency 
 ```'SampleFrequency'``` should be paired with a numeric value that specifies the frequency at which data are sampled.  Default is 25kHz.
   Note: due to hardware limitations, the upper limit for the NI DAQ USB-6003 is 100kHz divided by the number of input channels.
 
+### Note on file format
+
+DataAcquisition by default saves data in the Dataacquisition Binary Format, a DBF file.  This can be opened and used for analysis in Matlab using Tamas Szalay's PoreView package with DBF file handling, found [here](https://github.com/sjfleming/PoreView-25o).
+
+DBF files can be converted to other file formats for use in other data analysis pipelines.  In the DataAcquisition graphical interface, navigate to File > Convert Data File.  After selecting a DBF file for conversion, select either CSV or HDF for the desired output file format.  HDF files are better, and the same size as DBF files.  CSV files are easy to open in Excel or Notepad, but the file size is much much larger.
 
 ## Example Usage
 
