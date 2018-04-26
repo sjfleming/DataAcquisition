@@ -221,77 +221,99 @@ classdef DataAcquisition < handle
                 
                 % set up new file, same name .csv or .hdf
                 newFileName = [dataPath, dataFile(1:end-3), filetype];
+                import matlab.io.hdf4.* % scope this import for the whole
                 
-                % open data file
-                oldFileName = [dataPath, dataFile];
-                [~, h] = dbfload(oldFileName, 'info');
-                chunk = 2e5; % 200k data points at a time
-                
-                % if CSV, display metadata at command window
-                if strcmp(filetype,'csv')
-                    display('Important file metadata will not be saved with CSV.')
-                    display('File metadata:')
-                    display(['Sampling interval = ' num2str(h.si) ' seconds'])
-                    display('Channels recorded:')
-                    display(h.chNames)
-                    display(['Number of data points recorded (for each channel) = ' num2str(h.numPts)])
-                    % put in initial headers in csv file
-                    fid = fopen(newFileName, 'W'); % capital W
-                    fmt = [repmat('%s, ', 1, length(h.chNames)) '\r\n'];
-                    fprintf(fid, fmt, h.chNames{:});
-                    fmtstr = [repmat('%.3f, ', 1, length(h.chNames)) '\r\n'];
-                    fmt = repmat(fmtstr, 1, chunk);
-                else
-                    % it's an hdf file, which needs to be initialized
-                    import matlab.io.hdf4.*
-                    sdID =  sd.start(newFileName,'create');
-                    % write meta-data from header into the hdf file
-                    sd.setAttr(sdID,'sampling_interval',h.si);
-                    sd.setAttr(sdID,'samples_per_channel',h.numPts);
-                    sd.setAttr(sdID,'number_of_channels',h.numChan);
-                    sd.setAttr(sdID,'convert_int16_to_double_by_dividing_by',h.data_compression_scaling);
-                    for i = 0:h.numChan-1
-                        sdsIDs(i+1) = sd.create(sdID,h.chNames{i+1},'int16',[h.numPts,1]);
-                        % calibration to go from 16-bit int to actual value
-                        sd.setCal(sdsIDs(i+1),1/h.data_compression_scaling(i+1),0,0,0,'int16'); % datatype of uncalibrated data
-                        % info
-                        sd.setDataStrs(sdsIDs(i+1),h.chNames{i+1},h.chNames{i+1}(end-2:end-1), ...
-                            'int16',sprintf('Timepoints sampled at intervals of %g seconds', h.si));
-                    end
-                end
-                
-                % load data in chunks and save in new format
-                fprintf('Converting dbf file to %s ...  %3.0f%% ',filetype,0)
-                for i = 0:chunk:h.numPts
-                    % load chunk
-                    range = [i, min(h.numPts, i+chunk)];
-                    % load and write chunk
+                try
+
+                    % open data file
+                    oldFileName = [dataPath, dataFile];
+                    [~, h] = dbfload(oldFileName, 'info');
+                    chunk = 2e5; % 200k data points at a time
+
+                    % if CSV, display metadata at command window
                     if strcmp(filetype,'csv')
-                        [d, ~] = dbfload(oldFileName, range, 'double');
-                        % dlmwrite(newFileName,d,'-append','precision',5,'newline','pc'); % slow
-                        if size(d,1) < chunk
-                            fmt  = repmat(fmtstr, 1, size(d,1)); % last chunk is smaller
-                        end
-                        fprintf(fid, fmt, d);
-                    elseif strcmp(filetype,'hdf')% it's hdf
-                        [d, ~] = dbfload(oldFileName, range, 'int16');
-                        for chan = 1:size(d,2)
-                            sd.writeData(sdsIDs(chan), [i, 0], d(:,chan));
+                        display('Important file metadata will not be saved with CSV.')
+                        display('File metadata:')
+                        display(['Sampling interval = ' num2str(h.si) ' seconds'])
+                        display('Channels recorded:')
+                        display(h.chNames)
+                        display(['Number of data points recorded (for each channel) = ' num2str(h.numPts)])
+                        % put in initial headers in csv file
+                        fid = fopen(newFileName, 'W'); % capital W
+                        fmt = [repmat('%s, ', 1, length(h.chNames)) '\r\n'];
+                        fprintf(fid, fmt, h.chNames{:});
+                        fmtstr = [repmat('%.3f, ', 1, length(h.chNames)) '\r\n'];
+                        fmt = repmat(fmtstr, 1, chunk);
+                    else
+                        % it's an hdf file, which needs to be initialized
+                        %delete newFileName % this seems to be necessary
+                        sdID =  sd.start(newFileName,'create');
+                        % write meta-data from header into the hdf file
+                        sd.setAttr(sdID,'sampling_interval',h.si);
+                        sd.setAttr(sdID,'samples_per_channel',h.numPts);
+                        sd.setAttr(sdID,'number_of_channels',h.numChan);
+                        sd.setAttr(sdID,'convert_int16_to_double_by_dividing_by',h.data_compression_scaling);
+                        for i = 0:h.numChan-1
+                            sdsIDs(i+1) = sd.create(sdID,h.chNames{i+1},'int16',h.numPts);
+                            % calibration to go from 16-bit int to actual value
+                            sd.setCal(sdsIDs(i+1),1/h.data_compression_scaling(i+1),0,0,0,'int16'); % datatype of uncalibrated data
+                            % info
+                            sd.setDataStrs(sdsIDs(i+1),h.chNames{i+1},h.chNames{i+1}(end-2:end-1), ...
+                                'int16',sprintf('Timepoints sampled at intervals of %g seconds', h.si));
                         end
                     end
-                    % track completion
-                    fprintf('\b\b\b\b\b%3.0f%% ',100*min([1, (i+chunk)/h.numPts]))
-                end
-                fprintf('\n')
+
+                    % load data in chunks and save in new format
+                    fprintf('Converting dbf file to %s ...  %3.0f%% ',filetype,0)
+                    for i = 0:chunk:h.numPts
+                        % load chunk
+                        range = [i, min(h.numPts, i+chunk)];
+                        % load and write chunk
+                        if strcmp(filetype,'csv')
+                            [d, ~] = dbfload(oldFileName, range, 'double');
+                            % dlmwrite(newFileName,d,'-append','precision',5,'newline','pc'); % slow
+                            if size(d,1) < chunk
+                                fmt  = repmat(fmtstr, 1, size(d,1)); % last chunk is smaller
+                            end
+                            fprintf(fid, fmt, d);
+                        elseif strcmp(filetype,'hdf')% it's hdf
+                            [d, ~] = dbfload(oldFileName, range, 'int16');
+                            for chan = 1:size(d,2)
+                                sd.writeData(sdsIDs(chan), i, d(:,chan));
+                            end
+                        end
+                        % track completion
+                        fprintf('\b\b\b\b\b%3.0f%% ',100*min([1, (i+chunk)/h.numPts]))
+                    end
+                    fprintf('\n')
+
+                    % close file
+                    if strcmp(filetype,'hdf')
+                        arrayfun(@(x) sd.endAccess(x), sdsIDs);
+                        sd.close(sdID);
+                    elseif strcmp(filetype,'csv')
+                        fclose(fid);
+                    end
+                    display(['Successfully saved new file ' newFileName])
                 
-                % close file
-                if strcmp(filetype,'hdf')
-                    arrayfun(@(x) sd.endAccess(x), sdsIDs);
-                    sd.close(sdID);
-                elseif strcmp(filetype,'csv')
-                    fclose(fid);
+                catch ex % something went wrong...
+                    
+                    % give up files
+                    if strcmp(filetype,'hdf')
+                        try
+                            arrayfun(@(x) sd.endAccess(x), sdsIDs);
+                            sd.close(sdID);
+                        catch ex
+                        end
+                    elseif strcmp(filetype,'csv')
+                        try
+                            fclose(fid);
+                        catch ex
+                        end
+                    end
+                    display('Something went wrong in the conversion... do you have write access?')
+                    
                 end
-                display(['Successfully saved new file ' newFileName])
                 
             end
             

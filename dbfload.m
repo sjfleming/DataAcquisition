@@ -74,8 +74,7 @@ function [ d, h ] = dbfload(filename, range, format)
         d = d16;
     else
         % scale data from 16-bit integer to a double
-        %d = double(d16)./repmat(h.data_compression_scaling,size(d16,1),1);
-        d = double(d16) / h.data_compression_scaling;
+        d = double(d16)./repmat(h.data_compression_scaling,size(d16,1),1);
     end
 
     % all done
