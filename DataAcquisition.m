@@ -1,12 +1,20 @@
 classdef DataAcquisition < handle
 % DATAACQUISITION is a Matlab program for electronic signal acquistion from
 % a National Instruments DAQ USB-6003.
-
+%
+% A graphical user interface can be launched from the command line in
+% Matlab by typing
+% >> DataAcquisition
+% at the command prompt.
+%
 % This software was written with Patch Clamp and electrophysiological
 % measurements in mind, although it could also be used as a simple
-% oscilloscope and data recording tool.
+% oscilloscope and data recording tool whenever measurements are made using
+% a DAQ from National Instruments.
 %
-% DataAcquisition has the following modes of operation:
+% DataAcquisition has the following modes of operation, which can be
+% accessed via the Mode menu.
+%
 % "Normal Acquisition":
 %   An oscilloscope mode, enabling live data viewing as well as "gap-free" 
 %   recording.
@@ -14,28 +22,40 @@ classdef DataAcquisition < handle
 %   A live noise plot is displayed on the screen and is periodically
 %   refreshed, allowing the user to identify noise sources, make changes in
 %   an experiment, and see their effects in real time.
-% "IV Acquisition":
+% "IV Curve":
 %   Programmable, periodic voltage stimulation allows the user to make a
 %   recording of current versus voltage.  This feature displays the results
 %   on screen in a second panel.
-% "Seal Test":
+% "Membrane Seal Test":
 %   A mode used for examining capacitance.  Reapeatedly
 %   applies a voltage step function and displays the resulting current
 %   response.  This mode is useful in patch clamp experiments, where the
 %   user can adjust capacitance compensation to offset the current spikes
-%   which accompany the voltage steps.
+%   which accompany voltage steps that are applied across a membrane.
+%
+% The configuration of the DAQ, including scale factors specific to the 
+% current amplifier being used, can be set by navigating to
+% File > Configure DAQ.
 %
 % Use of the functionality specific to electrophysiology measurements (IV
-% curve and membrane seal test) require the analog output terminal ao0 to
-% be connected to an external command input on the current amplifier.
+% curve and membrane seal test) require the analog output terminal 'ao0' of
+% the DAQ to be connected to an external command input on the current 
+% amplifier.
 %
-% Data is saved in a .dbf file format in the folder specified by the user.
+% Data is saved in a .dbf file format in the folder specified by the user 
+% (can be set by navigating to File > Choose Save Directory).
 % The .dbf file format, for "Dataacquisition Binary Format," is a binary
 % file which contains a header followed by the signal data, and can be
 % opened using Tamas Szalay's PoreView software, with the appropriate
 % additions for .dbf handling.
-
+%
+% Data in .dbf files can also be converted to other filetypes for use in
+% other data analysis pipelines.  Data can be converted via
+% File > Convert Data File
+% using the dialog that pops up.
+%
 % Stephen Fleming 2016.08.13
+% latest updates 2018.04.25
 
     properties
         fig         % Handle for the entire DataAcquisition figure
@@ -76,11 +96,11 @@ classdef DataAcquisition < handle
             obj.outputAlpha = inputs.OutputAlpha;
             
             % Figure out scale factor for data compression
+            % (i.e. lossless representation as a 16-bit integer)
             obj.data_compression_scaling = (2^15-1)./obj.alpha/10; % range of 10V
             
             % Set constants
             obj.outputFreq = 100;
-%             obj.audio = audioplayer(0,obj.sampling);
             
             % Initialize DAQ
             function startDAQ(~,~)
@@ -172,6 +192,109 @@ classdef DataAcquisition < handle
 
             end
             
+            % Enable the user to convert DBF file to another filetype
+            function convertDataFile(~,~)
+                % convert file from the DBF filetype to another filetype,
+                % either HDF or CSV, which will be larger files, but can be
+                % used in any data analysis pipeline.
+                
+                % open a dialog to prompt user to select a file for
+                % conversion
+                [dataFile, dataPath] = uigetfile([obj.file.folder '/*.dbf'], ...
+                    'Select DBF file to convert');
+                
+                % if unable to get input file from user
+                if any([isempty(dataFile), dataFile == 0])
+                    display('Conversion aborted.')
+                    return;
+                end
+                
+                % pop up a dialog to let user choose desired file type
+                filetype = questdlg('What is the desired output file type?', ...
+                    'File converter', 'hdf', 'csv', 'Cancel', 'Cancel');
+                
+                % if user chose to cancel
+                if strcmp(filetype,'Cancel')
+                    display('Conversion aborted.')
+                    return;
+                end
+                
+                % set up new file, same name .csv or .hdf
+                newFileName = [dataPath, dataFile(1:end-3), filetype];
+                
+                % open data file
+                oldFileName = [dataPath, dataFile];
+                [~, h] = dbfload(oldFileName, 'info');
+                chunk = 2e5; % 200k data points at a time
+                
+                % if CSV, display metadata at command window
+                if strcmp(filetype,'csv')
+                    display('Important file metadata will not be saved with CSV.')
+                    display('File metadata:')
+                    display(['Sampling interval = ' num2str(h.si) ' seconds'])
+                    display('Channels recorded:')
+                    display(h.chNames)
+                    display(['Number of data points recorded (for each channel) = ' num2str(h.numPts)])
+                    % put in initial headers in csv file
+                    fid = fopen(newFileName, 'W'); % capital W
+                    fmt = [repmat('%s, ', 1, length(h.chNames)) '\r\n'];
+                    fprintf(fid, fmt, h.chNames{:});
+                    fmtstr = [repmat('%.3f, ', 1, length(h.chNames)) '\r\n'];
+                    fmt = repmat(fmtstr, 1, chunk);
+                else
+                    % it's an hdf file, which needs to be initialized
+                    import matlab.io.hdf4.*
+                    sdID =  sd.start(newFileName,'create');
+                    % write meta-data from header into the hdf file
+                    sd.setAttr(sdID,'sampling_interval',h.si);
+                    sd.setAttr(sdID,'samples_per_channel',h.numPts);
+                    sd.setAttr(sdID,'number_of_channels',h.numChan);
+                    sd.setAttr(sdID,'convert_int16_to_double_by_dividing_by',h.data_compression_scaling);
+                    for i = 0:h.numChan-1
+                        sdsIDs(i+1) = sd.create(sdID,h.chNames{i+1},'int16',[h.numPts,1]);
+                        % calibration to go from 16-bit int to actual value
+                        sd.setCal(sdsIDs(i+1),1/h.data_compression_scaling(i+1),0,0,0,'int16'); % datatype of uncalibrated data
+                        % info
+                        sd.setDataStrs(sdsIDs(i+1),h.chNames{i+1},h.chNames{i+1}(end-2:end-1), ...
+                            'int16',sprintf('Timepoints sampled at intervals of %g seconds', h.si));
+                    end
+                end
+                
+                % load data in chunks and save in new format
+                fprintf('Converting dbf file to %s ...  %3.0f%% ',filetype,0)
+                for i = 0:chunk:h.numPts
+                    % load chunk
+                    range = [i, min(h.numPts, i+chunk)];
+                    % load and write chunk
+                    if strcmp(filetype,'csv')
+                        [d, ~] = dbfload(oldFileName, range, 'double');
+                        % dlmwrite(newFileName,d,'-append','precision',5,'newline','pc'); % slow
+                        if size(d,1) < chunk
+                            fmt  = repmat(fmtstr, 1, size(d,1)); % last chunk is smaller
+                        end
+                        fprintf(fid, fmt, d);
+                    elseif strcmp(filetype,'hdf')% it's hdf
+                        [d, ~] = dbfload(oldFileName, range, 'int16');
+                        for chan = 1:size(d,2)
+                            sd.writeData(sdsIDs(chan), [i, 0], d(:,chan));
+                        end
+                    end
+                    % track completion
+                    fprintf('\b\b\b\b\b%3.0f%% ',100*min([1, (i+chunk)/h.numPts]))
+                end
+                fprintf('\n')
+                
+                % close file
+                if strcmp(filetype,'hdf')
+                    arrayfun(@(x) sd.endAccess(x), sdsIDs);
+                    sd.close(sdID);
+                elseif strcmp(filetype,'csv')
+                    fclose(fid);
+                end
+                display(['Successfully saved new file ' newFileName])
+                
+            end
+            
             % Define what happens on close
             function closeProg(~,~)
                 % close figure
@@ -225,6 +348,7 @@ classdef DataAcquisition < handle
             f = uimenu('Label','File');
             uimenu(f,'Label','Choose Save Directory','Callback',@setFileLocation);
             uimenu(f,'Label','Configure DAQ','Callback',@configure);
+            uimenu(f,'Label','Convert Data File','Callback',@convertDataFile);
             uimenu(f,'Label','Quit','Callback',@closeProg);
             
             mm = uimenu('Label','Mode');
