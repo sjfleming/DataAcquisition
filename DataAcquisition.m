@@ -240,9 +240,7 @@ classdef DataAcquisition < handle
                         display(['Number of data points recorded (for each channel) = ' num2str(h.numPts)])
                         % put in initial headers in csv file
                         fid = fopen(newFileName, 'W'); % capital W
-                        fmt = [repmat('%s, ', 1, length(h.chNames)) '\r\n'];
                         fprintf(fid, fmt, h.chNames{:});
-                        fmtstr = [repmat('%.3f, ', 1, length(h.chNames)) '\r\n'];
                         fmt = repmat(fmtstr, 1, chunk);
                     else
                         % it's an hdf file, which needs to be initialized
@@ -258,7 +256,7 @@ classdef DataAcquisition < handle
                             % calibration to go from 16-bit int to actual value
                             sd.setCal(sdsIDs(i+1),1/h.data_compression_scaling(i+1),0,0,0,'int16'); % datatype of uncalibrated data
                             % info
-                            sd.setDataStrs(sdsIDs(i+1),h.chNames{i+1},h.chNames{i+1}(end-2:end-1), ...
+                            sd.setDataStrs(sdsIDs(i+1),[h.chNames{i+1} ' = int16 value * scale_factor'],h.chNames{i+1}(end-2:end-1), ...
                                 'int16',sprintf('Timepoints sampled at intervals of %g seconds', h.si));
                         end
                     end
