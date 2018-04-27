@@ -240,7 +240,9 @@ classdef DataAcquisition < handle
                         display(['Number of data points recorded (for each channel) = ' num2str(h.numPts)])
                         % put in initial headers in csv file
                         fid = fopen(newFileName, 'W'); % capital W
+                        fmt = [repmat('%s,', 1, length(h.chNames)) '\r\n'];
                         fprintf(fid, fmt, h.chNames{:});
+                        fmtstr = [repmat('%.3f,', 1, length(h.chNames)) '\r\n'];
                         fmt = repmat(fmtstr, 1, chunk);
                     else
                         % it's an hdf file, which needs to be initialized
